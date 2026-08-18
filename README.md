@@ -19,4 +19,4 @@ If the database was configured before match deletion was added, run `add-delete-
 
 For the lock-in status, run `add-lock-status.sql` once in the Supabase SQL Editor.
 
-The lobby resets automatically at midnight in `Europe/Amsterdam`. Existing installations should run `switch-to-amsterdam-daily-reset.sql` once in the Supabase SQL Editor.
+The lobby stores a full Sunday-to-Saturday schedule and resets every Saturday at 23:59 in `Europe/Amsterdam`. Existing installations should run `switch-to-weekly-reset.sql` once in the Supabase SQL Editor.
