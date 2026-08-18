@@ -1,4 +1,6 @@
 -- Run this file once in Supabase Dashboard > SQL Editor.
+create extension if not exists citext with schema extensions;
+
 create or replace function public.current_lobby_week()
 returns date language sql stable as $$
   with clock as (select now() at time zone 'Europe/Amsterdam' as local_now)
@@ -10,7 +12,7 @@ $$;
 
 create table if not exists public.players (
   game_date date not null default public.current_lobby_week(),
-  name text not null check (char_length(name) between 1 and 24),
+  name extensions.citext not null check (char_length(name) between 1 and 24),
   slots text[] not null default '{}',
   locked_in boolean not null default false,
   joined_at timestamptz not null default now(),
