@@ -15,10 +15,12 @@ let selectedDay = new Date().getDay();
 const inviteView = $("#invite-view");
 const lobbyView = $("#lobby-view");
 const nameInput = $("#summoner-name");
+const tagInput = $("#summoner-tag");
 const yesButton = $("#yes-button");
 const noButton = $("#no-button");
 const answerZone = $("#answer-zone");
 nameInput.value = "";
+tagInput.value = "";
 $("#today-label").textContent = `Semana del ${formatWeekDate(weekStart())}`;
 
 function amsterdamParts() {
@@ -37,7 +39,10 @@ function persist() {
   if (state.date !== weekStart()) { state.date = weekStart(); state.players = []; draftSlots.clear(); availabilityDirty = false; }
   localStorage.setItem(storeKey, JSON.stringify(state));
 }
-function cleanName() { return nameInput.value.trim().replace(/\s+/g, " ").slice(0, 24); }
+function gameName() { return nameInput.value.trim().replace(/\s+/g," ").slice(0,16); }
+function gameTag() { return tagInput.value.trim().replace(/[^a-zA-Z0-9]/g,"").slice(0,5); }
+function cleanName() { return `${gameName()}#${gameTag()}`; }
+function validRiotId() { return gameName().length>=3 && gameTag().length>=3; }
 function formatWeekDate(value) { const [y,m,d] = value.split("-").map(Number); return new Intl.DateTimeFormat("es-AR", { day:"numeric", month:"short" }).format(new Date(y,m-1,d)); }
 function dayDate(index) { const date = new Date(`${weekStart()}T00:00:00Z`); date.setUTCDate(date.getUTCDate()+index); return { year:date.getUTCFullYear(), month:date.getUTCMonth(), day:date.getUTCDate() }; }
 function slotsForDay(index) {
@@ -56,16 +61,18 @@ noButton.addEventListener("click", () => {
 });
 yesButton.addEventListener("click", async () => {
   currentName=cleanName();
-  if(!currentName){$("#name-error").textContent="Primero decinos quién sos, manco.";nameInput.focus();return;}
+  if(!validRiotId()){$("#name-error").textContent="Ingresá tu GameName y Tag completos.";nameInput.focus();return;}
   sessionStorage.setItem("salelol-name",currentName);
   if(!currentPlayer()) state.players.push({name:currentName,slots:[],lockedIn:false,joinedAt:Date.now()});
   persist(); try{await remoteStore.join(currentName);await refreshRemote();}catch(error){console.error(error);}
   inviteView.classList.add("hidden");lobbyView.classList.remove("hidden");render();
 });
-nameInput.addEventListener("input",()=>{
+function validateRiotId(){
   $("#name-error").textContent="";
-  yesButton.disabled=cleanName().length<2;
-});
+  yesButton.disabled=!validRiotId();
+}
+nameInput.addEventListener("input",validateRiotId);
+tagInput.addEventListener("input",()=>{tagInput.value=gameTag();validateRiotId();});
 $("#day-tabs").addEventListener("click",event=>{const button=event.target.closest("[data-day]");if(!button)return;selectedDay=Number(button.dataset.day);render();});
 $("#time-slots").addEventListener("click",event=>{const slot=event.target.closest(".slot");if(!slot)return;if(!availabilityDirty)draftSlots=new Set(currentPlayer()?.slots||[]);draftSlots.has(slot.dataset.time)?draftSlots.delete(slot.dataset.time):draftSlots.add(slot.dataset.time);availabilityDirty=true;renderTimeGrid();});
 $("#save-availability").addEventListener("click",async()=>{const player=currentPlayer();if(!player)return;if(!availabilityDirty)draftSlots=new Set(player.slots||[]);player.slots=[...draftSlots];persist();render();try{await remoteStore.saveSlots(currentName,player.slots);availabilityDirty=false;await refreshRemote();$("#save-message").textContent="Semana guardada. GG.";}catch(error){console.error(error);}setTimeout(()=>{$("#save-message").textContent="";},2200);});
@@ -74,9 +81,17 @@ $("#lock-button").addEventListener("click",async()=>{const player=currentPlayer(
 function render(){
   const players=[...state.players].sort((a,b)=>a.joinedAt-b.joinedAt);
   $("#player-count").textContent=players.filter(player=>player.lockedIn).length;
-  $("#players-list").innerHTML=players.length?players.map((player,index)=>{const days=dayNames.filter((_,day)=>slotsForDay(day).some(slot=>player.slots.includes(slot.id)));return `<div class="player"><span class="player-color" style="--player-color:${colors[index%colors.length]}"></span><div class="lock-status ${player.lockedIn?"is-locked":""}">${player.lockedIn?"✓":"○"}</div><div><strong>${escapeHtml(player.name)}</strong><small>${days.length?days.join(" · "):"Todavía sin horarios"}</small></div></div>`;}).join(""):`<div class="empty">Todavía no entró ningún manco.</div>`;
+  $("#players-list").innerHTML=players.length?players.map((player,index)=>renderPlayer(player,index)).join(""):`<div class="empty">Todavía no entró ningún manco.</div>`;
   const me=currentPlayer();$("#lock-button").textContent=me?.lockedIn?"DESBLOQUEAR":"LOCK IN";$("#lock-button").classList.toggle("is-locked",Boolean(me?.lockedIn));
   renderDayTabs();renderTimeGrid();renderTodayMatches();renderWeekCalendar(players);
+}
+function renderPlayer(player,index){
+  const days=dayNames.filter((_,day)=>slotsForDay(day).some(slot=>player.slots.includes(slot.id)));
+  const rank=(player.rankTier||"unranked").toLowerCase();
+  const recent=Array.isArray(player.recentGames)?player.recentGames.slice(0,5):[];
+  const games=Array.from({length:5},(_,game)=>`<i class="game-result ${recent[game]===true?"win":recent[game]===false?"loss":"pending"}"></i>`).join("");
+  const icon=player.profileIconUrl?`<img src="${escapeHtml(player.profileIconUrl)}" alt="" />`:`<span>${escapeHtml(player.name[0].toUpperCase())}</span>`;
+  return `<div class="player player-card rank-${rank}"><span class="player-color" style="--player-color:${colors[index%colors.length]}"></span><div class="profile-icon">${icon}</div><div class="player-details"><div class="player-name-line"><strong>${escapeHtml(player.name)}</strong><em>${escapeHtml((player.rankTier||"Sin rango").toUpperCase())}</em></div><div class="recent-games" aria-label="Últimas cinco partidas">${games}</div><small>${days.length?days.join(" · "):"Todavía sin horarios"}</small></div><div class="lock-status ${player.lockedIn?"is-locked":""}">${player.lockedIn?"✓":"○"}</div></div>`;
 }
 function renderDayTabs(){$("#day-tabs").innerHTML=dayNames.map((name,index)=>{const date=dayDate(index);return `<button type="button" data-day="${index}" class="day-tab ${selectedDay===index?"active":""}"><span>${name.slice(0,3)}</span><strong>${date.day}</strong></button>`;}).join("");$("#selected-day-label").textContent=dayNames[selectedDay];}
 function renderTimeGrid(){const selected=availabilityDirty?draftSlots:new Set(currentPlayer()?.slots||[]);$("#time-slots").innerHTML=slotsForDay(selectedDay).map(slot=>{const count=state.players.filter(player=>player.slots.includes(slot.id)).length;return `<button class="slot ${selected.has(slot.id)?"selected":""}" type="button" data-time="${slot.id}"><strong>${slot.label}</strong><small>${count} disponible${count===1?"":"s"}</small></button>`;}).join("");}
