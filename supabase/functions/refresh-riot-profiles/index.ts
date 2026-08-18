@@ -33,8 +33,12 @@ Deno.serve(async (request) => {
 
   const projectUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  if (request.headers.get("authorization") !== `Bearer ${serviceRoleKey}`) {
-    return json({ error: "This maintenance function requires the service role" }, 403);
+  const refreshSecret = Deno.env.get("RIOT_REFRESH_SECRET")?.trim();
+  const body = await request.json().catch(() => ({}));
+  const hasServiceRole = request.headers.get("authorization") === `Bearer ${serviceRoleKey}`;
+  const hasRefreshSecret = Boolean(refreshSecret && body.refreshSecret === refreshSecret);
+  if (!hasServiceRole && !hasRefreshSecret) {
+    return json({ error: "Invalid refresh secret" }, 403);
   }
 
   const supabase = createClient(projectUrl, serviceRoleKey);
