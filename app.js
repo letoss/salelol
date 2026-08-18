@@ -4,6 +4,7 @@ const taunts = ["No seas trolaso", "Los mancos dicen No", "Alto manco", "No pode
 const dayNames = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
 const colors = ["#0ac8b9", "#c89b3c", "#d979c7", "#65a9ff", "#ef6b62", "#8bd450", "#ad80ff", "#f29f4b"];
 const storeKey = "salelol-state-v2";
+const savedRiotIdKey = "salelol-riot-id";
 const $ = selector => document.querySelector(selector);
 const state = loadState();
 let currentName = "";
@@ -19,8 +20,11 @@ const tagInput = $("#summoner-tag");
 const yesButton = $("#yes-button");
 const noButton = $("#no-button");
 const answerZone = $("#answer-zone");
-nameInput.value = "";
-tagInput.value = "";
+const installButton = $("#install-button");
+const savedRiotId = loadSavedRiotId();
+let installPrompt = null;
+nameInput.value = savedRiotId.gameName;
+tagInput.value = savedRiotId.tagLine;
 $("#today-label").textContent = `Semana del ${formatWeekDate(weekStart())}`;
 
 function amsterdamParts() {
@@ -35,6 +39,7 @@ function weekStart() {
   return date.toISOString().slice(0, 10);
 }
 function loadState() { try { return JSON.parse(localStorage.getItem(storeKey)) || { date:weekStart(), players:[] }; } catch { return { date:weekStart(), players:[] }; } }
+function loadSavedRiotId() { try { const value=JSON.parse(localStorage.getItem(savedRiotIdKey));return {gameName:value?.gameName||"",tagLine:value?.tagLine||""}; } catch { return {gameName:"",tagLine:""}; } }
 function persist() {
   if (state.date !== weekStart()) { state.date = weekStart(); state.players = []; draftSlots.clear(); availabilityDirty = false; }
   localStorage.setItem(storeKey, JSON.stringify(state));
@@ -63,6 +68,7 @@ yesButton.addEventListener("click", async () => {
   const submittedGameName=gameName(), submittedTag=gameTag();
   currentName=cleanName();
   if(!validRiotId()){$("#name-error").textContent="Ingresá tu GameName y Tag completos.";nameInput.focus();return;}
+  localStorage.setItem(savedRiotIdKey,JSON.stringify({gameName:submittedGameName,tagLine:submittedTag}));
   sessionStorage.setItem("salelol-name",currentName);
   if(!currentPlayer()) state.players.push({name:currentName,slots:[],lockedIn:false,joinedAt:Date.now()});
   persist();inviteView.classList.add("hidden");lobbyView.classList.remove("hidden");render();
@@ -80,6 +86,9 @@ function validateRiotId(){
 }
 nameInput.addEventListener("input",validateRiotId);
 tagInput.addEventListener("input",()=>{tagInput.value=gameTag();validateRiotId();});
+window.addEventListener("beforeinstallprompt",event=>{event.preventDefault();installPrompt=event;installButton.classList.add("visible");});
+window.addEventListener("appinstalled",()=>{installPrompt=null;installButton.classList.remove("visible");});
+installButton.addEventListener("click",async()=>{if(installPrompt){installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;installButton.classList.remove("visible");return;}const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);alert(ios?"En Safari, tocá Compartir y después ‘Agregar a pantalla de inicio’.":"Abrí el menú del navegador y elegí ‘Agregar a pantalla de inicio’ o ‘Instalar aplicación’.");});
 $("#day-tabs").addEventListener("click",event=>{const button=event.target.closest("[data-day]");if(!button)return;selectedDay=Number(button.dataset.day);render();});
 $("#time-slots").addEventListener("click",event=>{const slot=event.target.closest(".slot");if(!slot)return;if(!availabilityDirty)draftSlots=new Set(currentPlayer()?.slots||[]);draftSlots.has(slot.dataset.time)?draftSlots.delete(slot.dataset.time):draftSlots.add(slot.dataset.time);availabilityDirty=true;renderTimeGrid();});
 $("#save-availability").addEventListener("click",async()=>{const player=currentPlayer();if(!player)return;if(!availabilityDirty)draftSlots=new Set(player.slots||[]);player.slots=[...draftSlots];persist();render();try{await remoteStore.saveSlots(currentName,player.slots);availabilityDirty=false;await refreshRemote();$("#save-message").textContent="Semana guardada. GG.";}catch(error){console.error(error);}setTimeout(()=>{$("#save-message").textContent="";},2200);});
@@ -114,3 +123,6 @@ async function pollForRiotProfile(name,maxAttempts=10){for(let attempt=0;attempt
 async function refreshRemote(){const remote=await remoteStore.load();if(!remote)return;Object.assign(state,remote);localStorage.setItem(storeKey,JSON.stringify(state));render();}
 window.addEventListener("storage",event=>{if(event.key===storeKey&&event.newValue){Object.assign(state,JSON.parse(event.newValue));render();}});
 if(remoteStore.enabled){refreshRemote().catch(console.error);setInterval(()=>refreshRemote().catch(console.error),5000);}
+validateRiotId();
+if(matchMedia("(display-mode: standalone)").matches||navigator.standalone){installButton.classList.remove("visible");}else if(/android|iphone|ipad|ipod/i.test(navigator.userAgent)){installButton.classList.add("visible");}
+if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js").catch(console.error));}
