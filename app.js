@@ -68,8 +68,10 @@ yesButton.addEventListener("click", async () => {
   persist();inviteView.classList.add("hidden");lobbyView.classList.remove("hidden");render();
   try{
     await remoteStore.join(currentName);
-    await remoteStore.fetchRiotProfile(submittedGameName,submittedTag);
-    await refreshRemote();
+    const profile=await remoteStore.fetchRiotProfile(submittedGameName,submittedTag);
+    applyProfile(currentPlayer(),profile);
+    render();
+    await pollForRiotProfile(currentName);
   }catch(error){console.error("Riot profile unavailable; lobby access preserved",error);await refreshRemote().catch(console.error);}
 });
 function validateRiotId(){
@@ -88,7 +90,7 @@ function render(){
   $("#player-count").textContent=players.filter(player=>player.lockedIn).length;
   $("#players-list").innerHTML=players.length?players.map((player,index)=>renderPlayer(player,index)).join(""):`<div class="empty">Todavía no entró ningún manco.</div>`;
   const me=currentPlayer();$("#lock-button").textContent=me?.lockedIn?"DESBLOQUEAR":"LOCK IN";$("#lock-button").classList.toggle("is-locked",Boolean(me?.lockedIn));
-  renderDayTabs();renderTimeGrid();renderTodayMatches();renderWeekCalendar(players);
+  renderDayTabs();renderTimeGrid();renderTodayMatches();renderWeekCalendar(players);renderMancoRanking(players);
 }
 function renderPlayer(player,index){
   const days=dayNames.filter((_,day)=>slotsForDay(day).some(slot=>player.slots.includes(slot.id)));
@@ -97,12 +99,18 @@ function renderPlayer(player,index){
   const recent=Array.isArray(player.recentGames)?player.recentGames.slice(0,5):[];
   const games=Array.from({length:5},(_,game)=>`<i class="game-result ${recent[game]===true?"win":recent[game]===false?"loss":"pending"}"></i>`).join("");
   const icon=player.profileIconUrl?`<img src="${escapeHtml(player.profileIconUrl)}" alt="" />`:`<span>${escapeHtml(player.name[0].toUpperCase())}</span>`;
-  return `<div class="player player-card rank-${rank}"><span class="player-color" style="--player-color:${colors[index%colors.length]}"></span><div class="profile-icon">${icon}</div><div class="player-details"><div class="player-name-line"><strong>${escapeHtml(player.name)}</strong>${rankEmblem}</div><div class="recent-games" aria-label="Últimas cinco partidas">${games}</div><small>${days.length?days.join(" · "):"Todavía sin horarios"}</small></div><div class="lock-status ${player.lockedIn?"is-locked":""}">${player.lockedIn?"✓":"○"}</div></div>`;
+  return `<div class="player player-card rank-${rank}"><span class="player-color" style="--player-color:${colors[index%colors.length]}"></span><div class="profile-icon">${icon}</div><div class="player-details"><div class="player-name-line"><strong>${escapeHtml(player.name)}</strong>${rankEmblem}</div><div class="recent-games has-tooltip" tabindex="0" data-tooltip="Últimas cinco partidas: verde = victoria, rojo = derrota" aria-label="Últimas cinco partidas: verde significa victoria y rojo derrota">${games}</div><small>${days.length?days.join(" · "):"Todavía sin horarios"}</small></div><div class="lock-status ${player.lockedIn?"is-locked":""}">${player.lockedIn?"✓":"○"}</div></div>`;
 }
 function renderDayTabs(){$("#day-tabs").innerHTML=dayNames.map((name,index)=>{const date=dayDate(index);return `<button type="button" data-day="${index}" class="day-tab ${selectedDay===index?"active":""}"><span>${name.slice(0,3)}</span><strong>${date.day}</strong></button>`;}).join("");$("#selected-day-label").textContent=dayNames[selectedDay];}
 function renderTimeGrid(){const selected=availabilityDirty?draftSlots:new Set(currentPlayer()?.slots||[]);$("#time-slots").innerHTML=slotsForDay(selectedDay).map(slot=>{const count=state.players.filter(player=>player.slots.includes(slot.id)).length;return `<button class="slot ${selected.has(slot.id)?"selected":""}" type="button" data-time="${slot.id}"><strong>${slot.label}</strong><small>${count} disponible${count===1?"":"s"}</small></button>`;}).join("");}
 function renderTodayMatches(){const overlaps=slotsForDay(new Date().getDay()).map(slot=>({...slot,players:state.players.filter(player=>player.slots.includes(slot.id))})).filter(item=>item.players.length>=2);$("#today-overlaps").innerHTML=overlaps.length?overlaps.map(item=>`<div class="overlap-item"><strong>${item.label}</strong><div><span>${item.players.length} invocadores</span><small>${item.players.map(player=>escapeHtml(player.name)).join(" · ")}</small></div></div>`).join(""):`<div class="empty">No hay coincidencias para hoy todavía.</div>`;}
-function renderWeekCalendar(players){$("#week-calendar").innerHTML=dayNames.map((name,day)=>{const slots=slotsForDay(day);const active=players.filter(player=>slots.some(slot=>player.slots.includes(slot.id)));const max=Math.max(0,...slots.map(slot=>players.filter(player=>player.slots.includes(slot.id)).length));const dots=active.map(player=>`<i style="--dot:${colors[players.indexOf(player)%colors.length]}" title="${escapeHtml(player.name)}"></i>`).join("");return `<div class="week-day"><div><strong>${name.slice(0,3)}</strong><small>${dayDate(day).day}</small></div><span class="calendar-dots">${dots||"—"}</span>${max>=2?`<b>×${max}</b>`:""}</div>`;}).join("");}
+function renderWeekCalendar(players){$("#week-calendar").innerHTML=dayNames.map((name,day)=>{const slots=slotsForDay(day);const groups=slots.map(slot=>players.filter(player=>player.slots.includes(slot.id)));const active=players.filter(player=>groups.some(group=>group.includes(player)));const max=Math.max(0,...groups.map(group=>group.length));const peakNames=[...new Set(groups.filter(group=>group.length===max).flat().map(player=>player.name))];const dots=active.map(player=>`<i style="--dot:${colors[players.indexOf(player)%colors.length]}" title="${escapeHtml(player.name)}"></i>`).join("");const badge=max>=2?`<b class="has-tooltip" tabindex="0" data-tooltip="${escapeHtml(peakNames.join(" · "))}" aria-label="${max} jugadores coinciden: ${escapeHtml(peakNames.join(", "))}">×${max}</b>`:"";return `<div class="week-day"><div><strong>${name.slice(0,3)}</strong><small>${dayDate(day).day}</small></div><span class="calendar-dots">${dots||"—"}</span>${badge}</div>`;}).join("");}
+function renderMancoRanking(players){
+  const ranked=players.map(player=>{const games=Array.isArray(player.recentGames)?player.recentGames.filter(result=>typeof result==="boolean"):[];return {player,losses:games.filter(result=>!result).length,wins:games.filter(Boolean).length,total:games.length};}).filter(item=>item.total).sort((a,b)=>b.losses-a.losses||a.wins-b.wins||a.player.name.localeCompare(b.player.name));
+  $("#manco-ranking").innerHTML=ranked.length?ranked.map((item,index)=>{const avatar=item.player.profileIconUrl?`<img src="${escapeHtml(item.player.profileIconUrl)}" alt="" />`:`<span>${escapeHtml(item.player.name[0].toUpperCase())}</span>`;return `<div class="manco-row ${index===0?"is-manco":""}"><strong>${index+1}</strong><div class="manco-avatar">${avatar}</div><span>${escapeHtml(item.player.name)}</span><small>${item.losses} derrota${item.losses===1?"":"s"}</small></div>`;}).join(""):`<div class="empty">Todavía no hay partidas para coronar a ningún manco.</div>`;
+}
+function applyProfile(player,profile){if(!player||!profile)return;player.profileIconUrl=profile.profileIconUrl;player.rankTier=profile.rankTier;player.rankDisplay=profile.rankDisplay;player.recentGames=profile.recentGames||[];persist();}
+async function pollForRiotProfile(name,maxAttempts=10){for(let attempt=0;attempt<maxAttempts;attempt++){await refreshRemote();const player=state.players.find(item=>item.name.toLowerCase()===name.toLowerCase());if(player&&(player.profileIconUrl||player.rankTier||(player.recentGames||[]).length))return true;await new Promise(resolve=>setTimeout(resolve,1200));}return false;}
 async function refreshRemote(){const remote=await remoteStore.load();if(!remote)return;Object.assign(state,remote);localStorage.setItem(storeKey,JSON.stringify(state));render();}
 window.addEventListener("storage",event=>{if(event.key===storeKey&&event.newValue){Object.assign(state,JSON.parse(event.newValue));render();}});
 if(remoteStore.enabled){refreshRemote().catch(console.error);setInterval(()=>refreshRemote().catch(console.error),5000);}
