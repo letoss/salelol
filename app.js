@@ -110,7 +110,6 @@ async function refreshRemote() {
 }
 function showConnectionError(error) {
   console.error(error);
-  $("#save-message").textContent = "No se pudo sincronizar. Revisá la configuración de Supabase.";
 }
 if (remoteStore.enabled) {
   refreshRemote().catch(showConnectionError);
