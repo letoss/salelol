@@ -101,7 +101,7 @@ $("#lock-button").addEventListener("click", async () => {
 
 function render() {
   const players = [...state.players].sort((a,b) => a.joinedAt-b.joinedAt);
-  $("#player-count").textContent = players.length;
+  $("#player-count").textContent = players.filter(player => player.lockedIn).length;
   $("#players-list").innerHTML = players.length ? players.map(p => `<div class="player"><div class="lock-status ${p.lockedIn ? "is-locked" : ""}" title="${p.lockedIn ? "Confirmado" : "Sin confirmar"}" aria-label="${p.lockedIn ? "Confirmado" : "Sin confirmar"}">${p.lockedIn ? "✓" : "○"}</div><div><strong>${escapeHtml(p.name)}</strong><small>${p.slots.length ? p.slots.join(" · ") : "Todavía sin horario"}</small></div></div>`).join("") : `<div class="empty">Todavía no entró ningún manco.</div>`;
   document.querySelectorAll(".slot").forEach(el => {
     const count = players.filter(p => p.slots.includes(el.dataset.time)).length;
