@@ -60,12 +60,17 @@ noButton.addEventListener("click", () => {
   yesButton.style.transform=`scale(${Math.min(1+noClicks*.18,2.15)})`;
 });
 yesButton.addEventListener("click", async () => {
+  const submittedGameName=gameName(), submittedTag=gameTag();
   currentName=cleanName();
   if(!validRiotId()){$("#name-error").textContent="Ingresá tu GameName y Tag completos.";nameInput.focus();return;}
   sessionStorage.setItem("salelol-name",currentName);
   if(!currentPlayer()) state.players.push({name:currentName,slots:[],lockedIn:false,joinedAt:Date.now()});
-  persist(); try{await remoteStore.join(currentName);await refreshRemote();}catch(error){console.error(error);}
-  inviteView.classList.add("hidden");lobbyView.classList.remove("hidden");render();
+  persist();inviteView.classList.add("hidden");lobbyView.classList.remove("hidden");render();
+  try{
+    await remoteStore.join(currentName);
+    await remoteStore.fetchRiotProfile(submittedGameName,submittedTag);
+    await refreshRemote();
+  }catch(error){console.error("Riot profile unavailable; lobby access preserved",error);await refreshRemote().catch(console.error);}
 });
 function validateRiotId(){
   $("#name-error").textContent="";
@@ -88,7 +93,7 @@ function render(){
 function renderPlayer(player,index){
   const days=dayNames.filter((_,day)=>slotsForDay(day).some(slot=>player.slots.includes(slot.id)));
   const rank=(player.rankTier||"unranked").toLowerCase();
-  const rankLabel=player.rankTier?`<em>${escapeHtml(player.rankTier.toUpperCase())}</em>`:"";
+  const rankLabel=player.rankTier?`<em>${escapeHtml((player.rankDisplay||player.rankTier).toUpperCase())}</em>`:"";
   const recent=Array.isArray(player.recentGames)?player.recentGames.slice(0,5):[];
   const games=Array.from({length:5},(_,game)=>`<i class="game-result ${recent[game]===true?"win":recent[game]===false?"loss":"pending"}"></i>`).join("");
   const icon=player.profileIconUrl?`<img src="${escapeHtml(player.profileIconUrl)}" alt="" />`:`<span>${escapeHtml(player.name[0].toUpperCase())}</span>`;
