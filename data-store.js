@@ -39,14 +39,14 @@ export const remoteStore = {
     const date = encodeURIComponent(today());
     const player = encodeURIComponent(name);
     return request(endpoint("players", `?game_date=eq.${date}&name=eq.${player}`), {
-      method:"PATCH", headers:{ Prefer:"return=minimal" }, body:JSON.stringify({ slots })
+      method:"PATCH", headers:{ Prefer:"return=minimal" }, body:JSON.stringify({ slots, last_seen:new Date().toISOString() })
     });
   },
   async setLocked(name, lockedIn) {
     const date = encodeURIComponent(today());
     const player = encodeURIComponent(name);
     return request(endpoint("players", `?game_date=eq.${date}&name=eq.${player}`), {
-      method:"PATCH", headers:{ Prefer:"return=minimal" }, body:JSON.stringify({ locked_in:lockedIn })
+      method:"PATCH", headers:{ Prefer:"return=minimal" }, body:JSON.stringify({ locked_in:lockedIn, last_seen:new Date().toISOString() })
     });
   },
   async heartbeat(name) {
