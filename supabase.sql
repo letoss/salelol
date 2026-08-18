@@ -1,6 +1,6 @@
 -- Run this file once in Supabase Dashboard > SQL Editor.
 create table if not exists public.players (
-  game_date date not null default current_date,
+  game_date date not null default ((now() at time zone 'Europe/Amsterdam')::date),
   name text not null check (char_length(name) between 1 and 24),
   slots text[] not null default '{}',
   locked_in boolean not null default false,
@@ -22,14 +22,15 @@ alter table public.matches enable row level security;
 
 -- This is an intentionally public friends-only board. No private data is stored.
 create policy "Anyone can view today's players"
-on public.players for select to anon using (game_date = current_date);
+on public.players for select to anon using (game_date = (now() at time zone 'Europe/Amsterdam')::date);
 
 create policy "Anyone can join today's lobby"
-on public.players for insert to anon with check (game_date = current_date);
+on public.players for insert to anon with check (game_date = (now() at time zone 'Europe/Amsterdam')::date);
 
 create policy "Anyone can update today's availability"
 on public.players for update to anon
-using (game_date = current_date) with check (game_date = current_date);
+using (game_date = (now() at time zone 'Europe/Amsterdam')::date)
+with check (game_date = (now() at time zone 'Europe/Amsterdam')::date);
 
 create policy "Anyone can view today's matches"
 on public.matches for select to anon using (game_date = current_date);

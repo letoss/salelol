@@ -5,7 +5,6 @@ const storeKey = "salelol-state-v1";
 const state = loadState();
 let currentName = sessionStorage.getItem("salelol-name") || "";
 let noClicks = 0;
-let isInLobby = false;
 let draftSlots = new Set();
 let availabilityDirty = false;
 
@@ -24,7 +23,13 @@ function loadState() {
   try { return JSON.parse(localStorage.getItem(storeKey)) || { date: today(), players: [], matches: [] }; }
   catch { return { date: today(), players: [], matches: [] }; }
 }
-function today() { return new Date().toISOString().slice(0,10); }
+function today() {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone:"Europe/Amsterdam", year:"numeric", month:"2-digit", day:"2-digit"
+  }).formatToParts(new Date());
+  const value = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+}
 function persist() {
   if (state.date !== today()) { state.date = today(); state.players = []; state.matches = []; }
   localStorage.setItem(storeKey, JSON.stringify(state));
@@ -50,10 +55,9 @@ yesButton.addEventListener("click", async () => {
   if (!currentName) { $("#name-error").textContent = "Primero decinos quién sos, manco."; nameInput.focus(); return; }
   sessionStorage.setItem("salelol-name", currentName);
   const existing = state.players.find((p) => p.name.toLowerCase() === currentName.toLowerCase());
-  if (!existing) state.players.push({ name:currentName, slots:[], lockedIn:false, joinedAt:Date.now(), lastSeen:Date.now() });
-  isInLobby = true;
+  if (!existing) state.players.push({ name:currentName, slots:[], lockedIn:false, joinedAt:Date.now() });
   persist();
-  try { await remoteStore.join(currentName); await remoteStore.heartbeat(currentName); await refreshRemote(); }
+  try { await remoteStore.join(currentName); await refreshRemote(); }
   catch (error) { showConnectionError(error); }
   inviteView.classList.add("hidden");
   lobbyView.classList.remove("hidden");
@@ -61,8 +65,15 @@ yesButton.addEventListener("click", async () => {
 });
 nameInput.addEventListener("input", () => { $("#name-error").textContent = ""; });
 
-const slotTimes = Array.from({ length:14 }, (_,i) => `${String(i+10).padStart(2,"0")}:00`);
-$("#time-slots").innerHTML = slotTimes.map(t => `<button class="slot" type="button" data-time="${t}"><strong>${t}</strong><small>0 disponibles</small></button>`).join("");
+const [lobbyYear, lobbyMonth, lobbyDay] = today().split("-").map(Number);
+const slotTimes = Array.from({ length:14 }, (_,i) => {
+  const hour = i + 10;
+  return {
+    id:new Date(lobbyYear, lobbyMonth - 1, lobbyDay, hour).toISOString(),
+    label:`${String(hour).padStart(2,"0")}:00`
+  };
+});
+$("#time-slots").innerHTML = slotTimes.map(slot => `<button class="slot" type="button" data-time="${slot.id}"><strong>${slot.label}</strong><small>0 disponibles</small></button>`).join("");
 $("#time-slots").addEventListener("click", (event) => {
   const slot = event.target.closest(".slot");
   if (!slot) return;
@@ -102,7 +113,7 @@ $("#lock-button").addEventListener("click", async () => {
 function render() {
   const players = [...state.players].sort((a,b) => a.joinedAt-b.joinedAt);
   $("#player-count").textContent = players.filter(player => player.lockedIn).length;
-  $("#players-list").innerHTML = players.length ? players.map(p => `<div class="player"><div class="lock-status ${p.lockedIn ? "is-locked" : ""}" title="${p.lockedIn ? "Confirmado" : "Sin confirmar"}" aria-label="${p.lockedIn ? "Confirmado" : "Sin confirmar"}">${p.lockedIn ? "✓" : "○"}</div><div><strong>${escapeHtml(p.name)}</strong><small>${p.slots.length ? p.slots.join(" · ") : "Todavía sin horario"}</small></div></div>`).join("") : `<div class="empty">Todavía no entró ningún manco.</div>`;
+  $("#players-list").innerHTML = players.length ? players.map(p => `<div class="player"><div class="lock-status ${p.lockedIn ? "is-locked" : ""}" title="${p.lockedIn ? "Confirmado" : "Sin confirmar"}" aria-label="${p.lockedIn ? "Confirmado" : "Sin confirmar"}">${p.lockedIn ? "✓" : "○"}</div><div><strong>${escapeHtml(p.name)}</strong><small>${p.slots.length ? p.slots.map(formatSlot).join(" · ") : "Todavía sin horario"}</small></div></div>`).join("") : `<div class="empty">Todavía no entró ningún manco.</div>`;
   document.querySelectorAll(".slot").forEach(el => {
     const count = players.filter(p => p.slots.includes(el.dataset.time)).length;
     el.querySelector("small").textContent = `${count} disponible${count===1?"":"s"}`;
@@ -114,10 +125,14 @@ function render() {
   const lockButton = $("#lock-button");
   lockButton.textContent = me?.lockedIn ? "DESBLOQUEAR" : "LOCK IN";
   lockButton.classList.toggle("is-locked", Boolean(me?.lockedIn));
-  const overlaps = slotTimes.map(time => ({ time, players:players.filter(p => p.slots.includes(time)) })).filter(item => item.players.length >= 2);
-  $("#overlap-list").innerHTML = overlaps.length ? overlaps.map(item => `<div class="overlap-item"><strong>${item.time}</strong><div><span>${item.players.length} invocadores</span><small>${item.players.map(p => escapeHtml(p.name)).join(" · ")}</small></div></div>`).join("") : `<div class="empty">Todavía no hay horarios compartidos.</div>`;
+  const overlaps = slotTimes.map(slot => ({ ...slot, players:players.filter(p => p.slots.includes(slot.id)) })).filter(item => item.players.length >= 2);
+  $("#overlap-list").innerHTML = overlaps.length ? overlaps.map(item => `<div class="overlap-item"><strong>${item.label}</strong><div><span>${item.players.length} invocadores</span><small>${item.players.map(p => escapeHtml(p.name)).join(" · ")}</small></div></div>`).join("") : `<div class="empty">Todavía no hay horarios compartidos.</div>`;
 }
 function escapeHtml(text) { const el=document.createElement("span"); el.textContent=text; return el.innerHTML; }
+function formatSlot(value) {
+  if (!value.includes("T")) return escapeHtml(value);
+  return new Intl.DateTimeFormat(undefined, { hour:"2-digit", minute:"2-digit", hour12:false }).format(new Date(value));
+}
 window.addEventListener("storage", (event) => { if(event.key===storeKey && event.newValue) { Object.assign(state,JSON.parse(event.newValue)); render(); } });
 
 async function refreshRemote() {
@@ -133,7 +148,4 @@ function showConnectionError(error) {
 if (remoteStore.enabled) {
   refreshRemote().catch(showConnectionError);
   setInterval(() => refreshRemote().catch(showConnectionError), 5000);
-  setInterval(() => {
-    if (isInLobby && currentName) remoteStore.heartbeat(currentName).catch(showConnectionError);
-  }, 20000);
 }

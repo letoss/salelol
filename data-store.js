@@ -6,7 +6,13 @@ const headers = {
   "Content-Type": "application/json"
 };
 
-function today() { return new Date().toISOString().slice(0, 10); }
+function today() {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone:"Europe/Amsterdam", year:"numeric", month:"2-digit", day:"2-digit"
+  }).formatToParts(new Date());
+  const value = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+}
 function endpoint(table, query = "") {
   return `${config.supabaseUrl.replace(/\/$/, "")}/rest/v1/${table}${query}`;
 }
@@ -21,11 +27,10 @@ export const remoteStore = {
   async load() {
     if (!enabled) return null;
     const date = encodeURIComponent(today());
-    const activeSince = encodeURIComponent(new Date(Date.now() - 60000).toISOString());
-    const players = await request(endpoint("players", `?game_date=eq.${date}&last_seen=gte.${activeSince}&select=name,slots,locked_in,joined_at,last_seen&order=joined_at.asc`));
+    const players = await request(endpoint("players", `?game_date=eq.${date}&select=name,slots,locked_in,joined_at&order=joined_at.asc`));
     return {
       date: today(),
-      players: players.map(p => ({ name:p.name, slots:p.slots || [], lockedIn:Boolean(p.locked_in), joinedAt:new Date(p.joined_at).getTime(), lastSeen:new Date(p.last_seen).getTime() })),
+      players: players.map(p => ({ name:p.name, slots:p.slots || [], lockedIn:Boolean(p.locked_in), joinedAt:new Date(p.joined_at).getTime() })),
       matches: []
     };
   },
@@ -39,21 +44,14 @@ export const remoteStore = {
     const date = encodeURIComponent(today());
     const player = encodeURIComponent(name);
     return request(endpoint("players", `?game_date=eq.${date}&name=eq.${player}`), {
-      method:"PATCH", headers:{ Prefer:"return=minimal" }, body:JSON.stringify({ slots, last_seen:new Date().toISOString() })
+      method:"PATCH", headers:{ Prefer:"return=minimal" }, body:JSON.stringify({ slots })
     });
   },
   async setLocked(name, lockedIn) {
     const date = encodeURIComponent(today());
     const player = encodeURIComponent(name);
     return request(endpoint("players", `?game_date=eq.${date}&name=eq.${player}`), {
-      method:"PATCH", headers:{ Prefer:"return=minimal" }, body:JSON.stringify({ locked_in:lockedIn, last_seen:new Date().toISOString() })
-    });
-  },
-  async heartbeat(name) {
-    const date = encodeURIComponent(today());
-    const player = encodeURIComponent(name);
-    return request(endpoint("players", `?game_date=eq.${date}&name=eq.${player}`), {
-      method:"PATCH", headers:{ Prefer:"return=minimal" }, body:JSON.stringify({ last_seen:new Date().toISOString() })
+      method:"PATCH", headers:{ Prefer:"return=minimal" }, body:JSON.stringify({ locked_in:lockedIn })
     });
   },
   async addMatch(match) {
