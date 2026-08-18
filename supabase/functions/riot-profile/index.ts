@@ -9,7 +9,13 @@ const tiers = ["IRON", "BRONZE", "SILVER", "GOLD", "PLATINUM", "EMERALD", "DIAMO
 const divisions: Record<string, number> = { IV: 1, III: 2, II: 3, I: 4 };
 
 class RiotError extends Error {
-  constructor(public status: number) { super(`Riot API returned ${status}`); }
+  constructor(
+    public status: number,
+    public stage: string,
+    public riotMessage: string,
+  ) {
+    super(`Riot API returned ${status} during ${stage}`);
+  }
 }
 function json(body: unknown, status = 200) {
   return Response.json(body, { status, headers: cors });
@@ -30,14 +36,16 @@ Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
+  let keyFormatValid = false;
   try {
     const { gameName, tagLine } = await request.json();
     if (typeof gameName !== "string" || gameName.trim().length < 3 || typeof tagLine !== "string" || !/^[a-zA-Z0-9]{3,5}$/.test(tagLine.trim())) {
       return json({ error: "A valid GameName and Tag are required" }, 400);
     }
 
-    const riotKey = Deno.env.get("RIOT_API_KEY");
+    const riotKey = Deno.env.get("RIOT_API_KEY")?.trim();
     if (!riotKey) return json({ error: "RIOT_API_KEY has not been configured" }, 500);
+    keyFormatValid = riotKey.startsWith("RGAPI-") && riotKey.length > 20;
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const requestedId = `${gameName.trim()}#${tagLine.trim()}`;
     const normalized = requestedId.toLocaleLowerCase();
@@ -45,22 +53,25 @@ Deno.serve(async (request) => {
     const { data: cached } = await supabase.from("riot_profiles").select("*").eq("riot_id_normalized", normalized).maybeSingle();
     if (cached && Date.now() - new Date(cached.refreshed_at).getTime() < 30 * 60 * 1000) return json(publicProfile(cached));
 
-    const riot = async (url: string) => {
+    const riot = async (stage: string, url: string) => {
       const response = await fetch(url, { headers: { "X-Riot-Token": riotKey } });
-      if (!response.ok) throw new RiotError(response.status);
+      if (!response.ok) {
+        const riotMessage = (await response.text()).slice(0, 500);
+        throw new RiotError(response.status, stage, riotMessage);
+      }
       return response.json();
     };
     const encodedName = encodeURIComponent(gameName.trim());
     const encodedTag = encodeURIComponent(tagLine.trim());
-    const account = await riot(`https://europe.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodedName}/${encodedTag}`);
-    const summoner = await riot(`https://euw1.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${encodeURIComponent(account.puuid)}`);
-    const entries = await riot(`https://euw1.api.riotgames.com/lol/league/v4/entries/by-summoner/${encodeURIComponent(summoner.id)}`);
+    const account = await riot("account", `https://europe.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodedName}/${encodedTag}`);
+    const summoner = await riot("summoner", `https://euw1.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${encodeURIComponent(account.puuid)}`);
+    const entries = await riot("league", `https://euw1.api.riotgames.com/lol/league/v4/entries/by-summoner/${encodeURIComponent(summoner.id)}`);
     const ranked = entries.filter((entry: Record<string, unknown>) => entry.queueType === "RANKED_SOLO_5x5" || entry.queueType === "RANKED_FLEX_SR");
     const score = (entry: Record<string, unknown>) => tiers.indexOf(String(entry.tier)) * 10 + (divisions[String(entry.rank)] || 0);
     const highest = ranked.sort((a: Record<string, unknown>, b: Record<string, unknown>) => score(b) - score(a))[0];
 
-    const matchIds = await riot(`https://europe.api.riotgames.com/lol/match/v5/matches/by-puuid/${encodeURIComponent(account.puuid)}/ids?start=0&count=5`);
-    const matches = await Promise.allSettled(matchIds.map((id: string) => riot(`https://europe.api.riotgames.com/lol/match/v5/matches/${encodeURIComponent(id)}`)));
+    const matchIds = await riot("match-list", `https://europe.api.riotgames.com/lol/match/v5/matches/by-puuid/${encodeURIComponent(account.puuid)}/ids?start=0&count=5`);
+    const matches = await Promise.allSettled(matchIds.map((id: string) => riot("match-detail", `https://europe.api.riotgames.com/lol/match/v5/matches/${encodeURIComponent(id)}`)));
     const recentGames = matches.flatMap((result) => {
       if (result.status !== "fulfilled") return [];
       const participant = result.value.info?.participants?.find((item: Record<string, unknown>) => item.puuid === account.puuid);
@@ -86,8 +97,14 @@ Deno.serve(async (request) => {
   } catch (error) {
     console.error(error);
     if (error instanceof RiotError) {
-      if (error.status === 404) return json({ error: "Riot ID not found on EUW" }, 404);
-      if (error.status === 401 || error.status === 403) return json({ error: "Riot API key is invalid or expired" }, 502);
+      const diagnostic = {
+        stage: error.stage,
+        riotStatus: error.status,
+        riotMessage: error.riotMessage || null,
+        keyFormatValid,
+      };
+      if (error.status === 404) return json({ error: "Riot resource not found", ...diagnostic }, 404);
+      if (error.status === 401 || error.status === 403) return json({ error: "Riot request was rejected", ...diagnostic }, 502);
       if (error.status === 429) return json({ error: "Riot API rate limit reached" }, 429);
     }
     return json({ error: "Unable to load Riot profile" }, 500);
