@@ -20,11 +20,11 @@
           <p class="subtitle">Ingresá tu nombre y tomá la única decisión correcta.</p>
           <label class="name-field">
             <span>Nombre de invocador</span>
-            <input id="summoner-name" type="text" maxlength="24" autocomplete="nickname" placeholder="Ej. Tuti" />
+            <input id="summoner-name" type="text" minlength="2" maxlength="24" autocomplete="off" placeholder="Escribí tu nombre" required />
           </label>
           <p id="name-error" class="error" role="alert"></p>
           <div id="answer-zone" class="answer-zone">
-            <button id="yes-button" class="button button-primary" type="button">SÍ, SALE</button>
+            <button id="yes-button" class="button button-primary" type="button" disabled>SÍ, SALE</button>
             <button id="no-button" class="button button-secondary" type="button">NO</button>
           </div>
           <p id="taunt" class="taunt" aria-live="polite"></p>
