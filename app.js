@@ -72,13 +72,19 @@ yesButton.addEventListener("click", async () => {
   sessionStorage.setItem("salelol-name",currentName);
   if(!currentPlayer()) state.players.push({name:currentName,slots:[],lockedIn:false,joinedAt:Date.now()});
   persist();inviteView.classList.add("hidden");lobbyView.classList.remove("hidden");render();
-  try{
-    await remoteStore.join(currentName);
-    const profile=await remoteStore.fetchRiotProfile(submittedGameName,submittedTag);
-    applyProfile(currentPlayer(),profile);
+  const [joinResult,profileResult]=await Promise.allSettled([
+    remoteStore.join(currentName),
+    remoteStore.fetchRiotProfile(submittedGameName,submittedTag)
+  ]);
+  if(joinResult.status==="rejected")console.error("Player join failed",joinResult.reason);
+  if(profileResult.status==="fulfilled"){
+    applyProfile(currentPlayer(),profileResult.value);
     render();
-    await pollForRiotProfile(currentName);
-  }catch(error){console.error("Riot profile unavailable; lobby access preserved",error);await refreshRemote().catch(console.error);}
+    if(joinResult.status==="fulfilled")await pollForRiotProfile(currentName);
+  }else{
+    console.error("Riot profile unavailable; lobby access preserved",profileResult.reason);
+    await refreshRemote().catch(console.error);
+  }
 });
 function validateRiotId(){
   $("#name-error").textContent="";
