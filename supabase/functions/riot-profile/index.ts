@@ -38,7 +38,7 @@ Deno.serve(async (request) => {
 
   let keyFormatValid = false;
   try {
-    const { gameName, tagLine } = await request.json();
+    const { gameName, tagLine, force: requestedForce = false } = await request.json();
     if (typeof gameName !== "string" || gameName.trim().length < 3 || typeof tagLine !== "string" || !/^[a-zA-Z0-9]{3,5}$/.test(tagLine.trim())) {
       return json({ error: "A valid GameName and Tag are required" }, 400);
     }
@@ -46,12 +46,15 @@ Deno.serve(async (request) => {
     const riotKey = Deno.env.get("RIOT_API_KEY")?.trim();
     if (!riotKey) return json({ error: "RIOT_API_KEY has not been configured" }, 500);
     keyFormatValid = riotKey.startsWith("RGAPI-") && riotKey.length > 20;
-    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, serviceRoleKey);
+    const canForce = request.headers.get("authorization") === `Bearer ${serviceRoleKey}`;
+    const force = requestedForce === true && canForce;
     const requestedId = `${gameName.trim()}#${tagLine.trim()}`;
     const normalized = requestedId.toLocaleLowerCase();
 
     const { data: cached } = await supabase.from("riot_profiles").select("*").eq("riot_id_normalized", normalized).maybeSingle();
-    if (cached && Date.now() - new Date(cached.refreshed_at).getTime() < 30 * 60 * 1000) return json(publicProfile(cached));
+    if (!force && cached && Date.now() - new Date(cached.refreshed_at).getTime() < 30 * 60 * 1000) return json(publicProfile(cached));
 
     const riot = async (stage: string, url: string) => {
       const response = await fetch(url, { headers: { "X-Riot-Token": riotKey } });
