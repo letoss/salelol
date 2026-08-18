@@ -2,7 +2,7 @@
 * { box-sizing:border-box; }
 html, body { min-height:100%; margin:0; }
 body { color:var(--gold-light); background:var(--ink); font-family:Inter,sans-serif; overflow-x:hidden; }
-.background { position:fixed; inset:0; z-index:-2; background:#010a13 url('assets/league-of-mancos.png') center center/cover no-repeat; }
+.background { position:fixed; inset:0; z-index:-2; background:#010a13 url('assets/league-of-mancos-v2.png') center center/cover no-repeat; }
 .background::after { content:""; position:absolute; inset:0; background:linear-gradient(180deg,rgba(1,10,19,.06),rgba(1,10,19,.28)),radial-gradient(circle at 50% 42%,transparent 30%,rgba(1,10,19,.22) 100%); }
 main { min-height:100vh; padding:32px; }
 .view { min-height:calc(100vh - 64px); }
