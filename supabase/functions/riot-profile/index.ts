@@ -65,7 +65,7 @@ Deno.serve(async (request) => {
     const encodedTag = encodeURIComponent(tagLine.trim());
     const account = await riot("account", `https://europe.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodedName}/${encodedTag}`);
     const summoner = await riot("summoner", `https://euw1.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${encodeURIComponent(account.puuid)}`);
-    const entries = await riot("league", `https://euw1.api.riotgames.com/lol/league/v4/entries/by-summoner/${encodeURIComponent(summoner.id)}`);
+    const entries = await riot("league", `https://euw1.api.riotgames.com/lol/league/v4/entries/by-puuid/${encodeURIComponent(account.puuid)}`);
     const ranked = entries.filter((entry: Record<string, unknown>) => entry.queueType === "RANKED_SOLO_5x5" || entry.queueType === "RANKED_FLEX_SR");
     const score = (entry: Record<string, unknown>) => tiers.indexOf(String(entry.tier)) * 10 + (divisions[String(entry.rank)] || 0);
     const highest = ranked.sort((a: Record<string, unknown>, b: Record<string, unknown>) => score(b) - score(a))[0];
