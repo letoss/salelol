@@ -79,3 +79,18 @@ input:focus { border-color:var(--gold); box-shadow:0 0 0 2px rgba(200,155,60,.15
 .lobby-view>.manco-card { margin-top:18px; }
 .manco-card { grid-column:1/-1; }.manco-ranking { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:9px; }.manco-row { display:grid; grid-template-columns:24px 34px minmax(0,1fr) auto; align-items:center; gap:10px; padding:10px 12px; border:1px solid rgba(120,90,40,.35); background:rgba(30,35,40,.55); }.manco-row>strong { color:var(--muted); font-family:Cinzel,serif; text-align:center; }.manco-row>span { overflow:hidden; color:var(--gold-light); font-weight:700; text-overflow:ellipsis; white-space:nowrap; }.manco-row>small { color:#e76a62; font-size:.7rem; }.manco-row.is-manco { border-color:rgba(224,79,79,.62); background:linear-gradient(90deg,rgba(224,79,79,.15),rgba(30,35,40,.55)); box-shadow:inset 3px 0 #e04f4f; }.manco-row.is-manco>strong { color:#e04f4f; }.manco-avatar { display:grid; place-items:center; width:34px; height:34px; overflow:hidden; border:1px solid #785a28; border-radius:50%; color:var(--gold); background:#071a20; font-family:Cinzel,serif; font-size:.75rem; font-weight:800; }.manco-avatar img { width:100%; height:100%; object-fit:cover; }
 @media (max-width:760px) { main{padding:14px}.view{min-height:calc(100vh - 28px)}.invite-card{min-height:540px;padding:38px 20px;background:linear-gradient(145deg,rgba(7,24,31,.78),rgba(1,10,19,.73))}.answer-zone{min-height:180px}.button{min-width:112px;padding:13px 18px}#yes-button{right:calc(50% + 8px)}.button-secondary{left:calc(50% + 8px)}.lobby-header{align-items:flex-start;padding:24px;flex-direction:column}.lobby-grid{grid-template-columns:1fr}.schedule-card{grid-row:auto}.section-card{padding:22px}.section-heading{display:block}.section-heading p{margin-top:10px}.time-slots{grid-template-columns:repeat(3,1fr)}.day-tabs{gap:3px}.day-tab{padding:8px 1px}.day-tab span{font-size:.54rem}.week-card{grid-column:auto}.week-calendar{grid-template-columns:repeat(4,1fr)}.background{background-position:50% top}.background::after{background:linear-gradient(180deg,rgba(1,10,19,.02),rgba(1,10,19,.3))} }
+@media (max-width:760px) {
+  html,body { width:100%; max-width:100%; overflow-x:clip; }
+  main,.view,.lobby-view,.lobby-header,.lobby-grid,.section-card { width:100%; max-width:100%; min-width:0; }
+  .lobby-grid>* ,.player,.player-name-line,.overlap-item { min-width:0; }
+  .time-slots { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .day-tabs { grid-template-columns:repeat(7,minmax(0,1fr)); }
+  .week-calendar { grid-template-columns:repeat(4,minmax(0,1fr)); }
+  .manco-ranking { grid-template-columns:minmax(0,1fr); }
+  .slot,.day-tab,.week-day { min-width:0; }
+  .slot small { overflow-wrap:anywhere; }
+  .has-tooltip::after { max-width:calc(100vw - 36px); }
+  .week-day>b::after { right:0; left:auto; transform:translateY(4px); }
+  .week-day>b:hover::after,.week-day>b:focus-visible::after { transform:translateY(0); }
+  .week-day:nth-child(4n+1)>b::after { right:auto; left:0; }
+}
