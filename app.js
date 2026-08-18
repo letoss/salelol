@@ -6,6 +6,8 @@ const state = loadState();
 let currentName = sessionStorage.getItem("salelol-name") || "";
 let noClicks = 0;
 let isInLobby = false;
+let draftSlots = new Set();
+let availabilityDirty = false;
 
 const $ = (selector) => document.querySelector(selector);
 const inviteView = $("#invite-view");
@@ -61,15 +63,29 @@ nameInput.addEventListener("input", () => { $("#name-error").textContent = ""; }
 
 const slotTimes = Array.from({ length:14 }, (_,i) => `${String(i+10).padStart(2,"0")}:00`);
 $("#time-slots").innerHTML = slotTimes.map(t => `<button class="slot" type="button" data-time="${t}"><strong>${t}</strong><small>0 disponibles</small></button>`).join("");
-$("#time-slots").addEventListener("click", (event) => event.target.closest(".slot")?.classList.toggle("selected"));
+$("#time-slots").addEventListener("click", (event) => {
+  const slot = event.target.closest(".slot");
+  if (!slot) return;
+  if (!availabilityDirty) {
+    const player = state.players.find(p => p.name.toLowerCase() === currentName.toLowerCase());
+    draftSlots = new Set(player?.slots || []);
+  }
+  slot.classList.toggle("selected");
+  slot.classList.contains("selected") ? draftSlots.add(slot.dataset.time) : draftSlots.delete(slot.dataset.time);
+  availabilityDirty = true;
+});
 
 $("#save-availability").addEventListener("click", async () => {
   const player = state.players.find((p) => p.name.toLowerCase() === currentName.toLowerCase());
   if (!player) return;
-  player.slots = [...document.querySelectorAll(".slot.selected")].map((el) => el.dataset.time);
+  if (!availabilityDirty) draftSlots = new Set(player.slots || []);
+  player.slots = [...draftSlots];
   persist(); render();
-  try { await remoteStore.saveSlots(currentName, player.slots); await refreshRemote(); }
-  catch (error) { showConnectionError(error); }
+  try {
+    await remoteStore.saveSlots(currentName, player.slots);
+    availabilityDirty = false;
+    await refreshRemote();
+  } catch (error) { showConnectionError(error); }
   $("#save-message").textContent = "Horarios guardados. GG.";
   setTimeout(() => $("#save-message").textContent = "", 2200);
 });
@@ -91,7 +107,8 @@ function render() {
     const count = players.filter(p => p.slots.includes(el.dataset.time)).length;
     el.querySelector("small").textContent = `${count} disponible${count===1?"":"s"}`;
     const me = players.find(p => p.name.toLowerCase()===currentName.toLowerCase());
-    el.classList.toggle("selected", Boolean(me?.slots.includes(el.dataset.time)));
+    const selectedSlots = availabilityDirty ? draftSlots : new Set(me?.slots || []);
+    el.classList.toggle("selected", selectedSlots.has(el.dataset.time));
   });
   const me = players.find(p => p.name.toLowerCase() === currentName.toLowerCase());
   const lockButton = $("#lock-button");
