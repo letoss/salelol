@@ -36,6 +36,8 @@ input:focus { border-color:var(--gold); box-shadow:0 0 0 2px rgba(200,155,60,.15
 .lobby-header .subtitle { margin-bottom:0; }
 .online-pill { flex:none; border:1px solid rgba(10,200,185,.35); padding:10px 14px; color:#c8d1cf; font-size:.82rem; }
 .online-pill span { display:inline-block; width:8px; height:8px; margin-right:8px; border-radius:50%; background:var(--blue); box-shadow:0 0 10px var(--blue); }
+.app-tabs { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:18px; }.app-tab { border:1px solid rgba(120,90,40,.45); padding:13px 16px; color:var(--muted); background:rgba(1,10,19,.78); font:inherit; font-size:.72rem; font-weight:800; letter-spacing:.1em; cursor:pointer; }.app-tab.active { border-color:var(--gold); color:var(--gold-light); background:linear-gradient(180deg,rgba(200,155,60,.2),rgba(1,10,19,.8)); box-shadow:inset 0 -2px var(--gold); }.tab-panel { min-width:0; }.tab-panel>.manco-card,.availability-card { margin-top:18px; }
+.availability-card { margin-bottom:32px; }
 .lobby-grid { display:grid; grid-template-columns:.75fr 1.25fr; gap:18px; margin-top:18px; padding-bottom:32px; }
 .section-card { position:relative; padding:28px; }
 .schedule-card { grid-row:span 2; }
@@ -81,7 +83,7 @@ input:focus { border-color:var(--gold); box-shadow:0 0 0 2px rgba(200,155,60,.15
 @media (max-width:760px) { main{padding:14px}.view{min-height:calc(100vh - 28px)}.invite-card{min-height:540px;padding:38px 20px;background:linear-gradient(145deg,rgba(7,24,31,.78),rgba(1,10,19,.73))}.answer-zone{min-height:180px}.button{min-width:112px;padding:13px 18px}#yes-button{right:calc(50% + 8px)}.button-secondary{left:calc(50% + 8px)}.lobby-header{align-items:flex-start;padding:24px;flex-direction:column}.lobby-grid{grid-template-columns:1fr}.schedule-card{grid-row:auto}.section-card{padding:22px}.section-heading{display:block}.section-heading p{margin-top:10px}.time-slots{grid-template-columns:repeat(3,1fr)}.day-tabs{gap:3px}.day-tab{padding:8px 1px}.day-tab span{font-size:.54rem}.week-card{grid-column:auto}.week-calendar{grid-template-columns:repeat(4,1fr)}.background{background-position:50% top}.background::after{background:linear-gradient(180deg,rgba(1,10,19,.02),rgba(1,10,19,.3))} }
 @media (max-width:760px) {
   html,body { width:100%; max-width:100%; overflow-x:clip; }
-  main,.view,.lobby-view,.lobby-header,.lobby-grid,.section-card { width:100%; max-width:100%; min-width:0; }
+  main,.view,.lobby-view,.lobby-header,.app-tabs,.tab-panel,.lobby-grid,.section-card { width:100%; max-width:100%; min-width:0; }
   .lobby-grid>* ,.player,.player-name-line,.overlap-item { min-width:0; }
   .time-slots { grid-template-columns:repeat(3,minmax(0,1fr)); }
   .day-tabs { grid-template-columns:repeat(7,minmax(0,1fr)); }
