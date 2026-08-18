@@ -6,7 +6,7 @@ const colors = ["#0ac8b9", "#c89b3c", "#d979c7", "#65a9ff", "#ef6b62", "#8bd450"
 const storeKey = "salelol-state-v2";
 const $ = selector => document.querySelector(selector);
 const state = loadState();
-let currentName = sessionStorage.getItem("salelol-name") || "";
+let currentName = "";
 let noClicks = 0;
 let draftSlots = new Set();
 let availabilityDirty = false;
@@ -18,7 +18,7 @@ const nameInput = $("#summoner-name");
 const yesButton = $("#yes-button");
 const noButton = $("#no-button");
 const answerZone = $("#answer-zone");
-nameInput.value = currentName;
+nameInput.value = "";
 $("#today-label").textContent = `Semana del ${formatWeekDate(weekStart())}`;
 
 function amsterdamParts() {
@@ -62,7 +62,10 @@ yesButton.addEventListener("click", async () => {
   persist(); try{await remoteStore.join(currentName);await refreshRemote();}catch(error){console.error(error);}
   inviteView.classList.add("hidden");lobbyView.classList.remove("hidden");render();
 });
-nameInput.addEventListener("input",()=>{$("#name-error").textContent="";});
+nameInput.addEventListener("input",()=>{
+  $("#name-error").textContent="";
+  yesButton.disabled=cleanName().length<2;
+});
 $("#day-tabs").addEventListener("click",event=>{const button=event.target.closest("[data-day]");if(!button)return;selectedDay=Number(button.dataset.day);render();});
 $("#time-slots").addEventListener("click",event=>{const slot=event.target.closest(".slot");if(!slot)return;if(!availabilityDirty)draftSlots=new Set(currentPlayer()?.slots||[]);draftSlots.has(slot.dataset.time)?draftSlots.delete(slot.dataset.time):draftSlots.add(slot.dataset.time);availabilityDirty=true;renderTimeGrid();});
 $("#save-availability").addEventListener("click",async()=>{const player=currentPlayer();if(!player)return;if(!availabilityDirty)draftSlots=new Set(player.slots||[]);player.slots=[...draftSlots];persist();render();try{await remoteStore.saveSlots(currentName,player.slots);availabilityDirty=false;await refreshRemote();$("#save-message").textContent="Semana guardada. GG.";}catch(error){console.error(error);}setTimeout(()=>{$("#save-message").textContent="";},2200);});
