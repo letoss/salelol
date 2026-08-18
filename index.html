@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#071a20" />
+    <title>Sale LoL?</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="background" aria-hidden="true"></div>
+    <main>
+      <section id="invite-view" class="view invite-view" aria-labelledby="invite-title">
+        <div class="invite-card panel">
+          <span class="eyebrow">LA GRIETA TE ESPERA</span>
+          <h1 id="invite-title">¿Sale LoL?</h1>
+          <p class="subtitle">Ingresá tu nombre y tomá la única decisión correcta.</p>
+          <label class="name-field">
+            <span>Nombre de invocador</span>
+            <input id="summoner-name" type="text" maxlength="24" autocomplete="nickname" placeholder="Ej. Tuti" />
+          </label>
+          <p id="name-error" class="error" role="alert"></p>
+          <div id="answer-zone" class="answer-zone">
+            <button id="yes-button" class="button button-primary" type="button">SÍ, SALE</button>
+            <button id="no-button" class="button button-secondary" type="button">NO</button>
+          </div>
+          <p id="taunt" class="taunt" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <section id="lobby-view" class="view lobby-view hidden" aria-labelledby="lobby-title">
+        <header class="lobby-header panel">
+          <div>
+            <span class="eyebrow">SALA PERSONALIZADA</span>
+            <h1 id="lobby-title">La lobby de los mancos</h1>
+            <p id="today-label" class="subtitle"></p>
+          </div>
+          <div class="online-pill"><span></span><strong id="player-count">0</strong> confirmados</div>
+        </header>
+
+        <div class="lobby-grid">
+          <section class="panel section-card">
+            <div class="section-heading"><div><span class="step">01</span><h2>Invocadores</h2></div></div>
+            <div id="players-list" class="players-list"></div>
+          </section>
+
+          <section class="panel section-card schedule-card">
+            <div class="section-heading">
+              <div><span class="step">02</span><h2>¿A qué hora sale?</h2></div>
+              <p>Marcá todos tus horarios disponibles hoy.</p>
+            </div>
+            <div id="time-slots" class="time-slots"></div>
+            <button id="save-availability" class="button button-primary full-width" type="button">GUARDAR MIS HORARIOS</button>
+            <p id="save-message" class="save-message" aria-live="polite"></p>
+          </section>
+
+          <section class="panel section-card request-card">
+            <div class="section-heading"><div><span class="step">03</span><h2>Crear partida</h2></div></div>
+            <form id="match-form" class="match-form">
+              <label><span>Hora propuesta</span><input id="match-time" type="time" required /></label>
+              <button class="button button-primary" type="submit">INVOCAR AL EQUIPO</button>
+            </form>
+            <div id="match-list" class="match-list"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+    <script src="config.js"></script>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
