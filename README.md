@@ -18,3 +18,5 @@ La página sincroniza la lobby cada cinco segundos. Sin configuración, usa `loc
 If the database was configured before match deletion was added, run `add-delete-policy.sql` once in the Supabase SQL Editor.
 
 For the lock-in status, run `add-lock-status.sql` once in the Supabase SQL Editor.
+
+For automatic presence cleanup, run `add-presence-heartbeat.sql` once in the Supabase SQL Editor.

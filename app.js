@@ -5,6 +5,7 @@ const storeKey = "salelol-state-v1";
 const state = loadState();
 let currentName = sessionStorage.getItem("salelol-name") || "";
 let noClicks = 0;
+let isInLobby = false;
 
 const $ = (selector) => document.querySelector(selector);
 const inviteView = $("#invite-view");
@@ -47,9 +48,10 @@ yesButton.addEventListener("click", async () => {
   if (!currentName) { $("#name-error").textContent = "Primero decinos quién sos, manco."; nameInput.focus(); return; }
   sessionStorage.setItem("salelol-name", currentName);
   const existing = state.players.find((p) => p.name.toLowerCase() === currentName.toLowerCase());
-  if (!existing) state.players.push({ name:currentName, slots:[], lockedIn:false, joinedAt:Date.now() });
+  if (!existing) state.players.push({ name:currentName, slots:[], lockedIn:false, joinedAt:Date.now(), lastSeen:Date.now() });
+  isInLobby = true;
   persist();
-  try { await remoteStore.join(currentName); await refreshRemote(); }
+  try { await remoteStore.join(currentName); await remoteStore.heartbeat(currentName); await refreshRemote(); }
   catch (error) { showConnectionError(error); }
   inviteView.classList.add("hidden");
   lobbyView.classList.remove("hidden");
@@ -114,4 +116,7 @@ function showConnectionError(error) {
 if (remoteStore.enabled) {
   refreshRemote().catch(showConnectionError);
   setInterval(() => refreshRemote().catch(showConnectionError), 5000);
+  setInterval(() => {
+    if (isInLobby && currentName) remoteStore.heartbeat(currentName).catch(showConnectionError);
+  }, 20000);
 }
