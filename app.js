@@ -57,7 +57,7 @@ yesButton.addEventListener("click", async () => {
 });
 nameInput.addEventListener("input", () => { $("#name-error").textContent = ""; });
 
-const slotTimes = Array.from({ length:12 }, (_,i) => `${String(i+15).padStart(2,"0")}:00`);
+const slotTimes = Array.from({ length:14 }, (_,i) => `${String(i+10).padStart(2,"0")}:00`);
 $("#time-slots").innerHTML = slotTimes.map(t => `<button class="slot" type="button" data-time="${t}"><strong>${t}</strong><small>0 disponibles</small></button>`).join("");
 $("#time-slots").addEventListener("click", (event) => event.target.closest(".slot")?.classList.toggle("selected"));
 
@@ -83,6 +83,17 @@ $("#match-form").addEventListener("submit", async (event) => {
   catch (error) { showConnectionError(error); }
 });
 
+$("#match-list").addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-delete-match]");
+  if (!button) return;
+  const match = state.matches.find(item => item.id === button.dataset.deleteMatch);
+  if (!match || match.creator.toLowerCase() !== currentName.toLowerCase()) return;
+  state.matches = state.matches.filter(item => item.id !== match.id);
+  persist(); render();
+  try { await remoteStore.deleteMatch(match.id); await refreshRemote(); }
+  catch (error) { showConnectionError(error); }
+});
+
 function render() {
   const players = [...state.players].sort((a,b) => a.joinedAt-b.joinedAt);
   $("#player-count").textContent = players.length;
@@ -93,7 +104,10 @@ function render() {
     const me = players.find(p => p.name.toLowerCase()===currentName.toLowerCase());
     el.classList.toggle("selected", Boolean(me?.slots.includes(el.dataset.time)));
   });
-  $("#match-list").innerHTML = state.matches.length ? state.matches.map(m => `<div class="match-item"><strong>${escapeHtml(m.time)} hs</strong><span>propuesta por ${escapeHtml(m.creator)}</span></div>`).join("") : `<div class="empty">No hay partidas propuestas todavía.</div>`;
+  $("#match-list").innerHTML = state.matches.length ? state.matches.map(m => {
+    const isMine = m.creator.toLowerCase() === currentName.toLowerCase();
+    return `<div class="match-item"><div><strong>${escapeHtml(m.time)} hs</strong><span>propuesta por ${escapeHtml(m.creator)}</span></div>${isMine ? `<button class="delete-match" type="button" data-delete-match="${escapeHtml(m.id)}" aria-label="Eliminar propuesta de las ${escapeHtml(m.time)}">ELIMINAR</button>` : ""}</div>`;
+  }).join("") : `<div class="empty">No hay partidas propuestas todavía.</div>`;
 }
 function escapeHtml(text) { const el=document.createElement("span"); el.textContent=text; return el.innerHTML; }
 window.addEventListener("storage", (event) => { if(event.key===storeKey && event.newValue) { Object.assign(state,JSON.parse(event.newValue)); render(); } });

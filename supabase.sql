@@ -35,5 +35,8 @@ on public.matches for select to anon using (game_date = current_date);
 create policy "Anyone can propose today's matches"
 on public.matches for insert to anon with check (game_date = current_date);
 
+create policy "Anyone can remove today's match proposals"
+on public.matches for delete to anon using (game_date = current_date);
+
 alter publication supabase_realtime add table public.players;
 alter publication supabase_realtime add table public.matches;

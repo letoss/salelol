@@ -49,5 +49,10 @@ export const remoteStore = {
       method:"POST", headers:{ Prefer:"return=minimal" },
       body:JSON.stringify({ id:match.id, game_date:today(), match_time:match.time, creator:match.creator })
     });
+  },
+  async deleteMatch(id) {
+    return request(endpoint("matches", `?id=eq.${encodeURIComponent(id)}&game_date=eq.${encodeURIComponent(today())}`), {
+      method:"DELETE", headers:{ Prefer:"return=minimal" }
+    });
   }
 };

@@ -14,3 +14,5 @@ Abrí `index.html` o serví la carpeta con `python -m http.server 8000`.
 4. Pegá esos dos valores en `config.js`. Nunca uses la secret key ni `service_role`.
 
 La página sincroniza la lobby cada cinco segundos. Sin configuración, usa `localStorage` como respaldo local.
+
+If the database was configured before match deletion was added, run `add-delete-policy.sql` once in the Supabase SQL Editor.
