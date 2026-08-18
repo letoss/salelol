@@ -19,8 +19,12 @@
           <h1 id="invite-title">¿Sale LoL?</h1>
           <p class="subtitle">Ingresá tu nombre y tomá la única decisión correcta.</p>
           <label class="name-field">
-            <span>Nombre de invocador</span>
-            <input id="summoner-name" type="text" minlength="2" maxlength="24" autocomplete="off" placeholder="Escribí tu nombre" required />
+            <span>Riot ID · EUW</span>
+            <div class="riot-id-fields">
+              <input id="summoner-name" type="text" minlength="3" maxlength="16" autocomplete="off" placeholder="GameName" aria-label="Game name" required />
+              <span>#</span>
+              <input id="summoner-tag" type="text" minlength="3" maxlength="5" autocomplete="off" placeholder="Tag" aria-label="Tag" required />
+            </div>
           </label>
           <p id="name-error" class="error" role="alert"></p>
           <div id="answer-zone" class="answer-zone">
