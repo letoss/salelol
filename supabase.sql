@@ -3,6 +3,7 @@ create table if not exists public.players (
   game_date date not null default current_date,
   name text not null check (char_length(name) between 1 and 24),
   slots text[] not null default '{}',
+  locked_in boolean not null default false,
   joined_at timestamptz not null default now(),
   primary key (game_date, name)
 );

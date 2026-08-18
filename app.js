@@ -47,7 +47,7 @@ yesButton.addEventListener("click", async () => {
   if (!currentName) { $("#name-error").textContent = "Primero decinos quién sos, manco."; nameInput.focus(); return; }
   sessionStorage.setItem("salelol-name", currentName);
   const existing = state.players.find((p) => p.name.toLowerCase() === currentName.toLowerCase());
-  if (!existing) state.players.push({ name:currentName, slots:[], joinedAt:Date.now() });
+  if (!existing) state.players.push({ name:currentName, slots:[], lockedIn:false, joinedAt:Date.now() });
   persist();
   try { await remoteStore.join(currentName); await refreshRemote(); }
   catch (error) { showConnectionError(error); }
@@ -72,42 +72,31 @@ $("#save-availability").addEventListener("click", async () => {
   setTimeout(() => $("#save-message").textContent = "", 2200);
 });
 
-$("#match-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const time = $("#match-time").value;
-  if (!time) return;
-  const match = { id:crypto.randomUUID(), time, creator:currentName, createdAt:Date.now() };
-  state.matches.unshift(match);
-  persist(); render(); event.target.reset();
-  try { await remoteStore.addMatch(match); await refreshRemote(); }
-  catch (error) { showConnectionError(error); }
-});
-
-$("#match-list").addEventListener("click", async (event) => {
-  const button = event.target.closest("[data-delete-match]");
-  if (!button) return;
-  const match = state.matches.find(item => item.id === button.dataset.deleteMatch);
-  if (!match || match.creator.toLowerCase() !== currentName.toLowerCase()) return;
-  state.matches = state.matches.filter(item => item.id !== match.id);
+$("#lock-button").addEventListener("click", async () => {
+  const player = state.players.find(p => p.name.toLowerCase() === currentName.toLowerCase());
+  if (!player) return;
+  player.lockedIn = !player.lockedIn;
   persist(); render();
-  try { await remoteStore.deleteMatch(match.id); await refreshRemote(); }
+  try { await remoteStore.setLocked(currentName, player.lockedIn); await refreshRemote(); }
   catch (error) { showConnectionError(error); }
 });
 
 function render() {
   const players = [...state.players].sort((a,b) => a.joinedAt-b.joinedAt);
   $("#player-count").textContent = players.length;
-  $("#players-list").innerHTML = players.length ? players.map(p => `<div class="player"><div class="avatar">${escapeHtml(p.name[0].toUpperCase())}</div><div><strong>${escapeHtml(p.name)}</strong><small>${p.slots.length ? p.slots.join(" · ") : "Todavía sin horario"}</small></div></div>`).join("") : `<div class="empty">Todavía no entró ningún manco.</div>`;
+  $("#players-list").innerHTML = players.length ? players.map(p => `<div class="player"><div class="lock-status ${p.lockedIn ? "is-locked" : ""}" title="${p.lockedIn ? "Confirmado" : "Sin confirmar"}" aria-label="${p.lockedIn ? "Confirmado" : "Sin confirmar"}">${p.lockedIn ? "✓" : "○"}</div><div><strong>${escapeHtml(p.name)}</strong><small>${p.slots.length ? p.slots.join(" · ") : "Todavía sin horario"}</small></div></div>`).join("") : `<div class="empty">Todavía no entró ningún manco.</div>`;
   document.querySelectorAll(".slot").forEach(el => {
     const count = players.filter(p => p.slots.includes(el.dataset.time)).length;
     el.querySelector("small").textContent = `${count} disponible${count===1?"":"s"}`;
     const me = players.find(p => p.name.toLowerCase()===currentName.toLowerCase());
     el.classList.toggle("selected", Boolean(me?.slots.includes(el.dataset.time)));
   });
-  $("#match-list").innerHTML = state.matches.length ? state.matches.map(m => {
-    const isMine = m.creator.toLowerCase() === currentName.toLowerCase();
-    return `<div class="match-item"><div><strong>${escapeHtml(m.time)} hs</strong><span>propuesta por ${escapeHtml(m.creator)}</span></div>${isMine ? `<button class="delete-match" type="button" data-delete-match="${escapeHtml(m.id)}" aria-label="Eliminar propuesta de las ${escapeHtml(m.time)}">ELIMINAR</button>` : ""}</div>`;
-  }).join("") : `<div class="empty">No hay partidas propuestas todavía.</div>`;
+  const me = players.find(p => p.name.toLowerCase() === currentName.toLowerCase());
+  const lockButton = $("#lock-button");
+  lockButton.textContent = me?.lockedIn ? "DESBLOQUEAR" : "LOCK IN";
+  lockButton.classList.toggle("is-locked", Boolean(me?.lockedIn));
+  const overlaps = slotTimes.map(time => ({ time, players:players.filter(p => p.slots.includes(time)) })).filter(item => item.players.length >= 2);
+  $("#overlap-list").innerHTML = overlaps.length ? overlaps.map(item => `<div class="overlap-item"><strong>${item.time}</strong><div><span>${item.players.length} invocadores</span><small>${item.players.map(p => escapeHtml(p.name)).join(" · ")}</small></div></div>`).join("") : `<div class="empty">Todavía no hay horarios compartidos.</div>`;
 }
 function escapeHtml(text) { const el=document.createElement("span"); el.textContent=text; return el.innerHTML; }
 window.addEventListener("storage", (event) => { if(event.key===storeKey && event.newValue) { Object.assign(state,JSON.parse(event.newValue)); render(); } });

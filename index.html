@@ -45,6 +45,7 @@
           <section class="panel section-card">
             <div class="section-heading"><div><span class="step">01</span><h2>Invocadores</h2></div></div>
             <div id="players-list" class="players-list"></div>
+            <button id="lock-button" class="button lock-button full-width" type="button">LOCK IN</button>
           </section>
 
           <section class="panel section-card schedule-card">
@@ -57,13 +58,9 @@
             <p id="save-message" class="save-message" aria-live="polite"></p>
           </section>
 
-          <section class="panel section-card request-card">
-            <div class="section-heading"><div><span class="step">03</span><h2>Crear partida</h2></div></div>
-            <form id="match-form" class="match-form">
-              <label><span>Hora propuesta</span><input id="match-time" type="time" required /></label>
-              <button class="button button-primary" type="submit">INVOCAR AL EQUIPO</button>
-            </form>
-            <div id="match-list" class="match-list"></div>
+          <section class="panel section-card overlap-card">
+            <div class="section-heading"><div><span class="step">03</span><h2>Horarios que coinciden</h2></div></div>
+            <div id="overlap-list" class="overlap-list"></div>
           </section>
         </div>
       </section>

@@ -16,3 +16,5 @@ Abrí `index.html` o serví la carpeta con `python -m http.server 8000`.
 La página sincroniza la lobby cada cinco segundos. Sin configuración, usa `localStorage` como respaldo local.
 
 If the database was configured before match deletion was added, run `add-delete-policy.sql` once in the Supabase SQL Editor.
+
+For the lock-in status, run `add-lock-status.sql` once in the Supabase SQL Editor.

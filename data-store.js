@@ -21,14 +21,11 @@ export const remoteStore = {
   async load() {
     if (!enabled) return null;
     const date = encodeURIComponent(today());
-    const [players, matches] = await Promise.all([
-      request(endpoint("players", `?game_date=eq.${date}&select=name,slots,joined_at&order=joined_at.asc`)),
-      request(endpoint("matches", `?game_date=eq.${date}&select=id,match_time,creator,created_at&order=created_at.desc`))
-    ]);
+    const players = await request(endpoint("players", `?game_date=eq.${date}&select=name,slots,locked_in,joined_at&order=joined_at.asc`));
     return {
       date: today(),
-      players: players.map(p => ({ name:p.name, slots:p.slots || [], joinedAt:new Date(p.joined_at).getTime() })),
-      matches: matches.map(m => ({ id:m.id, time:m.match_time.slice(0,5), creator:m.creator, createdAt:new Date(m.created_at).getTime() }))
+      players: players.map(p => ({ name:p.name, slots:p.slots || [], lockedIn:Boolean(p.locked_in), joinedAt:new Date(p.joined_at).getTime() })),
+      matches: []
     };
   },
   async join(name) {
@@ -42,6 +39,13 @@ export const remoteStore = {
     const player = encodeURIComponent(name);
     return request(endpoint("players", `?game_date=eq.${date}&name=eq.${player}`), {
       method:"PATCH", headers:{ Prefer:"return=minimal" }, body:JSON.stringify({ slots })
+    });
+  },
+  async setLocked(name, lockedIn) {
+    const date = encodeURIComponent(today());
+    const player = encodeURIComponent(name);
+    return request(endpoint("players", `?game_date=eq.${date}&name=eq.${player}`), {
+      method:"PATCH", headers:{ Prefer:"return=minimal" }, body:JSON.stringify({ locked_in:lockedIn })
     });
   },
   async addMatch(match) {
