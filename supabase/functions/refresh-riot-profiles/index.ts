@@ -22,8 +22,9 @@ function currentWeekStart() {
   }).formatToParts(new Date());
   const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   const date = new Date(Date.UTC(+value.year, +value.month - 1, +value.day));
-  const reset = date.getUTCDay() === 6 && +value.hour === 23 && +value.minute >= 59;
-  date.setUTCDate(date.getUTCDate() + (reset ? 1 : -date.getUTCDay()));
+  const reset = date.getUTCDay() === 0 && +value.hour === 23 && +value.minute >= 59;
+  const daysSinceMonday = (date.getUTCDay() + 6) % 7;
+  date.setUTCDate(date.getUTCDate() + (reset ? 1 : -daysSinceMonday));
   return date.toISOString().slice(0, 10);
 }
 

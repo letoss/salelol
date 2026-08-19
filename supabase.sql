@@ -5,8 +5,8 @@ create or replace function public.current_lobby_week()
 returns date language sql stable as $$
   with clock as (select now() at time zone 'Europe/Amsterdam' as local_now)
   select case
-    when extract(dow from local_now) = 6 and local_now::time >= time '23:59' then local_now::date + 1
-    else local_now::date - extract(dow from local_now)::integer
+    when extract(dow from local_now) = 0 and local_now::time >= time '23:59' then local_now::date + 1
+    else local_now::date - ((extract(dow from local_now)::integer + 6) % 7)
   end from clock;
 $$;
 

@@ -1,7 +1,7 @@
 import { remoteStore } from "./data-store.js";
 
 const taunts = ["No seas trolaso", "Los mancos dicen No", "Alto manco", "No podes ser tan cagon", "Saleeee"];
-const dayNames = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+const dayNames = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 const colors = ["#0ac8b9", "#c89b3c", "#d979c7", "#65a9ff", "#ef6b62", "#8bd450", "#ad80ff", "#f29f4b"];
 const storeKey = "salelol-state-v2";
 const savedRiotIdKey = "salelol-riot-id";
@@ -11,7 +11,7 @@ let currentName = "";
 let noClicks = 0;
 let draftSlots = new Set();
 let availabilityDirty = false;
-let selectedDay = new Date().getDay();
+let selectedDay = (new Date().getDay()+6)%7;
 
 const inviteView = $("#invite-view");
 const lobbyView = $("#lobby-view");
@@ -34,11 +34,12 @@ function amsterdamParts() {
 function weekStart() {
   const value = amsterdamParts();
   const date = new Date(Date.UTC(+value.year, +value.month - 1, +value.day));
-  const reset = date.getUTCDay() === 6 && +value.hour === 23 && +value.minute >= 59;
-  date.setUTCDate(date.getUTCDate() + (reset ? 1 : -date.getUTCDay()));
+  const reset = date.getUTCDay() === 0 && +value.hour === 23 && +value.minute >= 59;
+  const daysSinceMonday=(date.getUTCDay()+6)%7;
+  date.setUTCDate(date.getUTCDate() + (reset ? 1 : -daysSinceMonday));
   return date.toISOString().slice(0, 10);
 }
-function loadState() { try { return JSON.parse(localStorage.getItem(storeKey)) || { date:weekStart(), players:[] }; } catch { return { date:weekStart(), players:[] }; } }
+function loadState() { try { const current=weekStart();const saved=JSON.parse(localStorage.getItem(storeKey));if(!saved)return {date:current,players:[]};const legacy=new Date(`${current}T00:00:00Z`);legacy.setUTCDate(legacy.getUTCDate()-1);if(saved.date===legacy.toISOString().slice(0,10))saved.date=current;return saved; } catch { return { date:weekStart(), players:[] }; } }
 function loadSavedRiotId() { try { const value=JSON.parse(localStorage.getItem(savedRiotIdKey));return {gameName:value?.gameName||"",tagLine:value?.tagLine||""}; } catch { return {gameName:"",tagLine:""}; } }
 function persist() {
   if (state.date !== weekStart()) { state.date = weekStart(); state.players = []; draftSlots.clear(); availabilityDirty = false; }
@@ -119,7 +120,7 @@ function renderPlayer(player,index){
 }
 function renderDayTabs(){$("#day-tabs").innerHTML=dayNames.map((name,index)=>{const date=dayDate(index);return `<button type="button" data-day="${index}" class="day-tab ${selectedDay===index?"active":""}"><span>${name.slice(0,3)}</span><strong>${date.day}</strong></button>`;}).join("");$("#selected-day-label").textContent=dayNames[selectedDay];}
 function renderTimeGrid(){const selected=availabilityDirty?draftSlots:new Set(currentPlayer()?.slots||[]);$("#time-slots").innerHTML=slotsForDay(selectedDay).map(slot=>{const count=state.players.filter(player=>player.slots.includes(slot.id)).length;return `<button class="slot ${selected.has(slot.id)?"selected":""}" type="button" data-time="${slot.id}"><strong>${slot.label}</strong><small>${count} disponible${count===1?"":"s"}</small></button>`;}).join("");}
-function renderTodayMatches(){const overlaps=slotsForDay(new Date().getDay()).map(slot=>({...slot,players:state.players.filter(player=>player.slots.includes(slot.id))})).filter(item=>item.players.length>=2);$("#today-overlaps").innerHTML=overlaps.length?overlaps.map(item=>`<div class="overlap-item"><strong>${item.label}</strong><div><span>${item.players.length} invocadores</span><small>${item.players.map(player=>escapeHtml(player.name)).join(" · ")}</small></div></div>`).join(""):`<div class="empty">No hay coincidencias para hoy todavía.</div>`;}
+function renderTodayMatches(){const today=(new Date().getDay()+6)%7;const overlaps=slotsForDay(today).map(slot=>({...slot,players:state.players.filter(player=>player.slots.includes(slot.id))})).filter(item=>item.players.length>=2);$("#today-overlaps").innerHTML=overlaps.length?overlaps.map(item=>`<div class="overlap-item"><strong>${item.label}</strong><div><span>${item.players.length} invocadores</span><small>${item.players.map(player=>escapeHtml(player.name)).join(" · ")}</small></div></div>`).join(""):`<div class="empty">No hay coincidencias para hoy todavía.</div>`;}
 function availabilitySegments(player,slots){
   const selected=slots.map(slot=>player.slots.includes(slot.id));
   const segments=[];
