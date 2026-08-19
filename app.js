@@ -39,7 +39,7 @@ function weekStart() {
   date.setUTCDate(date.getUTCDate() + (reset ? 1 : -daysSinceMonday));
   return date.toISOString().slice(0, 10);
 }
-function loadState() { try { const current=weekStart();const saved=JSON.parse(localStorage.getItem(storeKey));if(!saved)return {date:current,players:[]};const legacy=new Date(`${current}T00:00:00Z`);legacy.setUTCDate(legacy.getUTCDate()-1);if(saved.date===legacy.toISOString().slice(0,10))saved.date=current;return saved; } catch { return { date:weekStart(), players:[] }; } }
+function loadState() { try { const current=weekStart();const saved=JSON.parse(localStorage.getItem(storeKey));if(!saved)return {date:current,players:[]};const legacy=new Date(`${current}T00:00:00Z`);legacy.setUTCDate(legacy.getUTCDate()-1);if(saved.date===legacy.toISOString().slice(0,10)){const validSlots=new Set(dayNames.flatMap((_,day)=>slotsForDay(day).map(slot=>slot.id)));saved.players.forEach(player=>{player.slots=(player.slots||[]).filter(slot=>validSlots.has(slot));});saved.date=current;}return saved; } catch { return { date:weekStart(), players:[] }; } }
 function loadSavedRiotId() { try { const value=JSON.parse(localStorage.getItem(savedRiotIdKey));return {gameName:value?.gameName||"",tagLine:value?.tagLine||""}; } catch { return {gameName:"",tagLine:""}; } }
 function persist() {
   if (state.date !== weekStart()) { state.date = weekStart(); state.players = []; draftSlots.clear(); availabilityDirty = false; }

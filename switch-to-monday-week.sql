@@ -1,5 +1,6 @@
 -- Run once in Supabase Dashboard > SQL Editor before using the Monday-first UI.
--- It preserves the current Sunday-first lobby under the new Monday week key.
+-- It keeps Monday-Saturday availability, drops the previous Sunday, and leaves
+-- the upcoming Sunday empty under the new Monday week key.
 begin;
 
 do $$
@@ -12,18 +13,31 @@ begin
   new_monday := old_sunday + 1;
 
   insert into public.players (game_date, name, slots, locked_in, joined_at, last_seen)
-  select new_monday, name, slots, locked_in, joined_at, last_seen
+  select new_monday,
+         name,
+         array(
+           select slot
+           from unnest(slots) as slot
+           where (slot::timestamptz at time zone 'Europe/Amsterdam')::date
+                 between new_monday and new_monday + 6
+         ),
+         locked_in,
+         joined_at,
+         last_seen
   from public.players
   where game_date = old_sunday
   on conflict (game_date, name) do update
   set slots = array(
         select distinct slot
         from unnest(public.players.slots || excluded.slots) as slot
+        where (slot::timestamptz at time zone 'Europe/Amsterdam')::date
+              between new_monday and new_monday + 6
       ),
       locked_in = public.players.locked_in or excluded.locked_in,
       joined_at = least(public.players.joined_at, excluded.joined_at),
       last_seen = greatest(public.players.last_seen, excluded.last_seen);
 
+  delete from public.players where game_date = old_sunday;
 end $$;
 
 create or replace function public.current_lobby_week()
