@@ -32,4 +32,4 @@ supabase functions deploy lobby-update
 supabase functions deploy riot-profile
 ```
 
-The browser publishable key remains public and read-only. Each player receives a device-specific ownership token; only that browser can update the player after joining. Every Edge Function is self-contained so its `index.ts` can be pasted directly into the Dashboard editor.
+The browser publishable key remains public and read-only. Each player receives a device-specific ownership token, and up to ten devices can be authorized by rejoining with the shared invitation code. Every Edge Function is self-contained so its `index.ts` can be pasted directly into the Dashboard editor.

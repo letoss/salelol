@@ -2,6 +2,9 @@
 begin;
 
 alter table public.players add column if not exists owner_token_hash text;
+alter table public.players add column if not exists owner_token_hashes text[] not null default '{}';
+update public.players set owner_token_hashes=array[owner_token_hash]
+where owner_token_hash is not null and not owner_token_hash=any(owner_token_hashes);
 
 create table if not exists public.api_rate_limits (
   scope text not null,

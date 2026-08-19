@@ -18,6 +18,7 @@ create table if not exists public.players (
   joined_at timestamptz not null default now(),
   last_seen timestamptz not null default now(),
   owner_token_hash text,
+  owner_token_hashes text[] not null default '{}',
   primary key (game_date, name)
 );
 

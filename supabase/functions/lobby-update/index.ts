@@ -15,8 +15,8 @@ Deno.serve(async (request) => {
     const {name,ownerToken,slots,lockedIn}=await request.json();
     if(typeof name!=="string"||typeof ownerToken!=="string")return json({error:"Missing ownership"},401);
     const db=adminClient(),week=currentWeekStart();
-    const {data:player,error}=await db.from("players").select("owner_token_hash").eq("game_date",week).eq("name",name.trim()).maybeSingle();
-    if(error)throw error;if(!player?.owner_token_hash||await hash(ownerToken)!==player.owner_token_hash)return json({error:"Not your player"},403);
+    const {data:player,error}=await db.from("players").select("owner_token_hash,owner_token_hashes").eq("game_date",week).eq("name",name.trim()).maybeSingle();
+    if(error)throw error;const tokenHash=await hash(ownerToken);if(!player||(player.owner_token_hash!==tokenHash&&!(player.owner_token_hashes||[]).includes(tokenHash)))return json({error:"Not your player"},403);
     const update:Record<string,unknown>={last_seen:new Date().toISOString()};
     if(slots!==undefined){if(!Array.isArray(slots)||slots.length>98||!slots.every((slot)=>typeof slot==="string"&&!Number.isNaN(Date.parse(slot))))return json({error:"Invalid slots"},400);update.slots=[...new Set(slots)];}
     if(lockedIn!==undefined){if(typeof lockedIn!=="boolean")return json({error:"Invalid lock state"},400);update.locked_in=lockedIn;}
