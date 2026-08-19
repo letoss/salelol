@@ -120,7 +120,38 @@ function renderPlayer(player,index){
 function renderDayTabs(){$("#day-tabs").innerHTML=dayNames.map((name,index)=>{const date=dayDate(index);return `<button type="button" data-day="${index}" class="day-tab ${selectedDay===index?"active":""}"><span>${name.slice(0,3)}</span><strong>${date.day}</strong></button>`;}).join("");$("#selected-day-label").textContent=dayNames[selectedDay];}
 function renderTimeGrid(){const selected=availabilityDirty?draftSlots:new Set(currentPlayer()?.slots||[]);$("#time-slots").innerHTML=slotsForDay(selectedDay).map(slot=>{const count=state.players.filter(player=>player.slots.includes(slot.id)).length;return `<button class="slot ${selected.has(slot.id)?"selected":""}" type="button" data-time="${slot.id}"><strong>${slot.label}</strong><small>${count} disponible${count===1?"":"s"}</small></button>`;}).join("");}
 function renderTodayMatches(){const overlaps=slotsForDay(new Date().getDay()).map(slot=>({...slot,players:state.players.filter(player=>player.slots.includes(slot.id))})).filter(item=>item.players.length>=2);$("#today-overlaps").innerHTML=overlaps.length?overlaps.map(item=>`<div class="overlap-item"><strong>${item.label}</strong><div><span>${item.players.length} invocadores</span><small>${item.players.map(player=>escapeHtml(player.name)).join(" · ")}</small></div></div>`).join(""):`<div class="empty">No hay coincidencias para hoy todavía.</div>`;}
-function renderWeekCalendar(players){$("#week-calendar").innerHTML=dayNames.map((name,day)=>{const slots=slotsForDay(day);const groups=slots.map(slot=>players.filter(player=>player.slots.includes(slot.id)));const active=players.filter(player=>groups.some(group=>group.includes(player)));const max=Math.max(0,...groups.map(group=>group.length));const peakNames=[...new Set(groups.filter(group=>group.length===max).flat().map(player=>player.name))];const dots=active.map(player=>`<i style="--dot:${colors[players.indexOf(player)%colors.length]}" title="${escapeHtml(player.name)}"></i>`).join("");const badge=max>=2?`<b class="has-tooltip" tabindex="0" data-tooltip="${escapeHtml(peakNames.join(" · "))}" aria-label="${max} jugadores coinciden: ${escapeHtml(peakNames.join(", "))}">×${max}</b>`:"";return `<div class="week-day"><div><strong>${name.slice(0,3)}</strong><small>${dayDate(day).day}</small></div><span class="calendar-dots">${dots||"—"}</span>${badge}</div>`;}).join("");}
+function availabilitySegments(player,slots){
+  const selected=slots.map(slot=>player.slots.includes(slot.id));
+  const segments=[];
+  let start=-1;
+  selected.forEach((isSelected,index)=>{
+    if(isSelected&&start<0)start=index;
+    if(start>=0&&(!isSelected||index===selected.length-1)){
+      const end=isSelected&&index===selected.length-1?index+1:index;
+      segments.push({start,end});
+      start=-1;
+    }
+  });
+  return segments;
+}
+function renderWeekCalendar(players){
+  $("#week-calendar").innerHTML=dayNames.map((name,day)=>{
+    const slots=slotsForDay(day);
+    const active=players.filter(player=>slots.some(slot=>player.slots.includes(slot.id)));
+    const axis=slots.map((slot,index)=>`<span style="--column:${index+1}">${index%2===0||index===slots.length-1?slot.label.slice(0,2):""}</span>`).join("");
+    const lanes=active.map(player=>{
+      const color=colors[players.indexOf(player)%colors.length];
+      const segments=availabilitySegments(player,slots).map(segment=>{
+        const from=slots[segment.start].label;
+        const toHour=Number(slots[segment.end-1].label.slice(0,2))+1;
+        const to=`${String(toHour).padStart(2,"0")}:00`;
+        return `<i style="--start:${segment.start+1};--end:${segment.end+1};--lane-color:${color}" title="${escapeHtml(player.name)}: ${from}–${to}"></i>`;
+      }).join("");
+      return `<div class="availability-lane" style="--lane-color:${color}"><strong title="${escapeHtml(player.name)}">${escapeHtml(player.name)}</strong><div class="availability-track" aria-label="Disponibilidad de ${escapeHtml(player.name)}">${segments}</div></div>`;
+    }).join("");
+    return `<article class="week-day"><header><div><strong>${name}</strong><small>${dayDate(day).day}</small></div><span>${active.length} disponible${active.length===1?"":"s"}</span></header><div class="day-timeline"><div class="timeline-axis"><b>INVOCADOR</b><div>${axis}</div></div><div class="availability-lanes">${lanes||`<p>Sin horarios cargados.</p>`}</div></div></article>`;
+  }).join("");
+}
 function renderMancoRanking(players){
   const ranked=players.map(player=>{const games=Array.isArray(player.recentGames)?player.recentGames.filter(result=>typeof result==="boolean"):[];return {player,losses:games.filter(result=>!result).length,wins:games.filter(Boolean).length,total:games.length};}).filter(item=>item.total).sort((a,b)=>b.losses-a.losses||a.wins-b.wins||a.player.name.localeCompare(b.player.name));
   $("#manco-ranking").innerHTML=ranked.length?ranked.map((item,index)=>{const avatar=item.player.profileIconUrl?`<img src="${escapeHtml(item.player.profileIconUrl)}" alt="" />`:`<span>${escapeHtml(item.player.name[0].toUpperCase())}</span>`;return `<div class="manco-row ${index===0?"is-manco":""}"><strong>${index+1}</strong><div class="manco-avatar">${avatar}</div><span>${escapeHtml(item.player.name)}</span><small>${item.losses} derrota${item.losses===1?"":"s"}</small></div>`;}).join(""):`<div class="empty">Todavía no hay partidas para coronar a ningún manco.</div>`;
