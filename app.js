@@ -123,7 +123,7 @@ function render(){
   $("#player-count").textContent=players.filter(player=>player.lockedIn).length;
   $("#players-list").innerHTML=players.length?players.map((player,index)=>renderPlayer(player,index)).join(""):`<div class="empty">Todavía no entró ningún manco.</div>`;
   const me=currentPlayer();$("#lock-button").textContent=me?.lockedIn?"DESBLOQUEAR":"LOCK IN";$("#lock-button").classList.toggle("is-locked",Boolean(me?.lockedIn));
-  renderDayTabs();renderTimeGrid();renderTodayMatches();renderWeekCalendar(players);renderMancoRanking(players);
+  renderDayTabs();renderTimeGrid();renderTodayMatches();renderWeekCalendar(players);renderSharedGame(players);renderMancoRanking(players);
 }
 function renderPlayer(player,index){
   const days=dayNames.filter((_,day)=>slotsForDay(day).some(slot=>player.slots.includes(slot.id)));
@@ -169,11 +169,38 @@ function renderWeekCalendar(players){
     return `<article class="week-day"><header><div><strong>${name}</strong><small>${dayDate(day).day}</small></div><span>${active.length} disponible${active.length===1?"":"s"}</span></header><div class="day-timeline"><div class="timeline-axis"><b>INVOCADOR</b><div>${axis}</div></div><div class="availability-lanes">${lanes||`<p>Sin horarios cargados.</p>`}</div></div></article>`;
   }).join("");
 }
+function latestSharedGame(players){
+  const groups=new Map();
+  players.forEach(player=>(player.recentMatchSummaries||[]).forEach(match=>{
+    if(!match?.matchId||!match?.teamId)return;
+    const key=`${match.matchId}:${match.teamId}`;
+    if(!groups.has(key))groups.set(key,{matchId:match.matchId,teamId:match.teamId,gameCreation:Number(match.gameCreation)||0,participants:[]});
+    groups.get(key).participants.push({player,match});
+  }));
+  return [...groups.values()].filter(game=>game.participants.length>=2).sort((a,b)=>b.gameCreation-a.gameCreation)[0]||null;
+}
+function kdaScore(match){return (Number(match.kills)+Number(match.assists))/Math.max(1,Number(match.deaths));}
+function renderSharedGame(players){
+  const card=$("#shared-game-card"),banner=$("#shared-game-banner");
+  const game=latestSharedGame(players);
+  if(!game){card.classList.add("hidden");banner.innerHTML="";return;}
+  const won=game.participants.every(item=>item.match.win===true);
+  const worst=[...game.participants].sort((a,b)=>kdaScore(a.match)-kdaScore(b.match)||Number(b.match.deaths)-Number(a.match.deaths)||Number(a.match.kills)-Number(b.match.kills))[0];
+  const headline=won?"Siempre confié en este team":`Report ${worst.player.name.split("#")[0]}`;
+  const score=`${Number(game.participants[0].match.teamKills)||0} – ${Number(game.participants[0].match.opponentKills)||0}`;
+  const rows=game.participants.map(({player,match})=>{
+    const avatar=player.profileIconUrl?`<img src="${escapeHtml(player.profileIconUrl)}" alt="" />`:`<span>${escapeHtml(player.name[0].toUpperCase())}</span>`;
+    return `<div class="shared-player"><div class="shared-avatar">${avatar}</div><div><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(match.championName||"Invocador")}</small></div><b>${Number(match.kills)||0} / ${Number(match.deaths)||0} / ${Number(match.assists)||0}</b></div>`;
+  }).join("");
+  banner.className=`shared-game-banner ${won?"is-win":"is-loss"}`;
+  banner.innerHTML=`<div class="shared-game-copy"><span>ÚLTIMA PARTIDA JUNTOS</span><h2>${escapeHtml(headline)}</h2><p><strong>${score}</strong> · ${game.participants.length} mancos registrados</p></div><div class="shared-players">${rows}</div>`;
+  card.classList.remove("hidden");
+}
 function renderMancoRanking(players){
   const ranked=players.map(player=>{const games=Array.isArray(player.recentGames)?player.recentGames.filter(result=>typeof result==="boolean"):[];return {player,losses:games.filter(result=>!result).length,wins:games.filter(Boolean).length,total:games.length};}).filter(item=>item.total).sort((a,b)=>b.losses-a.losses||a.wins-b.wins||a.player.name.localeCompare(b.player.name));
   $("#manco-ranking").innerHTML=ranked.length?ranked.map((item,index)=>{const avatar=item.player.profileIconUrl?`<img src="${escapeHtml(item.player.profileIconUrl)}" alt="" />`:`<span>${escapeHtml(item.player.name[0].toUpperCase())}</span>`;return `<div class="manco-row ${index===0?"is-manco":""}"><strong>${index+1}</strong><div class="manco-avatar">${avatar}</div><span>${escapeHtml(item.player.name)}</span><small>${item.losses} derrota${item.losses===1?"":"s"}</small></div>`;}).join(""):`<div class="empty">Todavía no hay partidas para coronar a ningún manco.</div>`;
 }
-function applyProfile(player,profile){if(!player||!profile)return;player.profileIconUrl=profile.profileIconUrl;player.rankTier=profile.rankTier;player.rankDisplay=profile.rankDisplay;player.recentGames=profile.recentGames||[];persist();}
+function applyProfile(player,profile){if(!player||!profile)return;player.profileIconUrl=profile.profileIconUrl;player.rankTier=profile.rankTier;player.rankDisplay=profile.rankDisplay;player.recentGames=profile.recentGames||[];player.recentMatchSummaries=profile.recentMatchSummaries||[];persist();}
 async function pollForRiotProfile(name,maxAttempts=10){for(let attempt=0;attempt<maxAttempts;attempt++){await refreshRemote();const player=state.players.find(item=>item.name.toLowerCase()===name.toLowerCase());if(player&&(player.profileIconUrl||player.rankTier||(player.recentGames||[]).length))return true;await new Promise(resolve=>setTimeout(resolve,1200));}return false;}
 async function refreshRemote(){const remote=await remoteStore.load();if(!remote)return;Object.assign(state,remote);localStorage.setItem(storeKey,JSON.stringify(state));render();}
 window.addEventListener("storage",event=>{if(event.key===storeKey&&event.newValue){Object.assign(state,JSON.parse(event.newValue));render();}});
