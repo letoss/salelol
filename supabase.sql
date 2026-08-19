@@ -17,6 +17,7 @@ create table if not exists public.players (
   locked_in boolean not null default false,
   joined_at timestamptz not null default now(),
   last_seen timestamptz not null default now(),
+  owner_token_hash text,
   primary key (game_date, name)
 );
 
@@ -28,29 +29,45 @@ create table if not exists public.matches (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.api_rate_limits (
+  scope text not null,
+  identifier text not null,
+  window_start timestamptz not null,
+  request_count integer not null default 0,
+  primary key (scope, identifier, window_start)
+);
+
 alter table public.players enable row level security;
 alter table public.matches enable row level security;
+alter table public.api_rate_limits enable row level security;
+
+create or replace function public.consume_api_rate_limit(rate_scope text, rate_identifier text, rate_limit integer, window_seconds integer)
+returns boolean language plpgsql security definer set search_path=public as $$
+declare bucket timestamptz; used integer;
+begin
+  bucket := to_timestamp(floor(extract(epoch from now()) / window_seconds) * window_seconds);
+  insert into public.api_rate_limits(scope,identifier,window_start,request_count)
+  values(rate_scope,rate_identifier,bucket,1)
+  on conflict(scope,identifier,window_start) do update set request_count=public.api_rate_limits.request_count+1
+  returning request_count into used;
+  delete from public.api_rate_limits where window_start < now()-interval '2 days';
+  return used <= rate_limit;
+end $$;
+revoke all on function public.consume_api_rate_limit(text,text,integer,integer) from public, anon, authenticated;
+grant execute on function public.consume_api_rate_limit(text,text,integer,integer) to service_role;
 
 -- This is an intentionally public friends-only board. No private data is stored.
 create policy "Anyone can view current week players"
 on public.players for select to anon using (game_date = public.current_lobby_week());
 
-create policy "Anyone can join current week lobby"
-on public.players for insert to anon with check (game_date = public.current_lobby_week());
-
-create policy "Anyone can update current week availability"
-on public.players for update to anon
-using (game_date = public.current_lobby_week())
-with check (game_date = public.current_lobby_week());
-
 create policy "Anyone can view today's matches"
 on public.matches for select to anon using (game_date = current_date);
 
-create policy "Anyone can propose today's matches"
-on public.matches for insert to anon with check (game_date = current_date);
-
-create policy "Anyone can remove today's match proposals"
-on public.matches for delete to anon using (game_date = current_date);
+revoke all on public.players from anon, authenticated;
+grant select(game_date,name,slots,locked_in,joined_at,last_seen) on public.players to anon, authenticated;
+revoke all on public.matches from anon, authenticated;
+grant select(id,game_date,match_time,creator,created_at) on public.matches to anon, authenticated;
+revoke all on public.api_rate_limits from anon, authenticated;
 
 alter publication supabase_realtime add table public.players;
 alter publication supabase_realtime add table public.matches;

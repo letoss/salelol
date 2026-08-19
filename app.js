@@ -5,6 +5,7 @@ const dayNames = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado
 const colors = ["#0ac8b9", "#c89b3c", "#d979c7", "#65a9ff", "#ef6b62", "#8bd450", "#ad80ff", "#f29f4b"];
 const storeKey = "salelol-state-v2";
 const savedRiotIdKey = "salelol-riot-id";
+const ownerTokensKey = "salelol-owner-tokens";
 const $ = selector => document.querySelector(selector);
 const state = loadState();
 let currentName = "";
@@ -17,12 +18,15 @@ const inviteView = $("#invite-view");
 const lobbyView = $("#lobby-view");
 const nameInput = $("#summoner-name");
 const tagInput = $("#summoner-tag");
+const inviteCodeInput = $("#invite-code");
 const yesButton = $("#yes-button");
 const noButton = $("#no-button");
 const answerZone = $("#answer-zone");
 const installButton = $("#install-button");
 const savedRiotId = loadSavedRiotId();
 let installPrompt = null;
+let currentOwnerToken = "";
+let currentInviteCode = "";
 nameInput.value = savedRiotId.gameName;
 tagInput.value = savedRiotId.tagLine;
 $("#today-label").textContent = `Semana del ${formatWeekDate(weekStart())}`;
@@ -41,6 +45,8 @@ function weekStart() {
 }
 function loadState() { try { const current=weekStart();const saved=JSON.parse(localStorage.getItem(storeKey));if(!saved)return {date:current,players:[]};const legacy=new Date(`${current}T00:00:00Z`);legacy.setUTCDate(legacy.getUTCDate()-1);if(saved.date===legacy.toISOString().slice(0,10)){const validSlots=new Set(dayNames.flatMap((_,day)=>slotsForDay(day).map(slot=>slot.id)));saved.players.forEach(player=>{player.slots=(player.slots||[]).filter(slot=>validSlots.has(slot));});saved.date=current;}return saved; } catch { return { date:weekStart(), players:[] }; } }
 function loadSavedRiotId() { try { const value=JSON.parse(localStorage.getItem(savedRiotIdKey));return {gameName:value?.gameName||"",tagLine:value?.tagLine||""}; } catch { return {gameName:"",tagLine:""}; } }
+function loadOwnerToken(name) { try { return JSON.parse(localStorage.getItem(ownerTokensKey))?.[name.toLowerCase()]||""; } catch { return ""; } }
+function saveOwnerToken(name,token) { const tokens=JSON.parse(localStorage.getItem(ownerTokensKey)||"{}");tokens[name.toLowerCase()]=token;localStorage.setItem(ownerTokensKey,JSON.stringify(tokens)); }
 function persist() {
   if (state.date !== weekStart()) { state.date = weekStart(); state.players = []; draftSlots.clear(); availabilityDirty = false; }
   localStorage.setItem(storeKey, JSON.stringify(state));
@@ -49,6 +55,7 @@ function gameName() { return nameInput.value.trim().replace(/\s+/g," ").slice(0,
 function gameTag() { return tagInput.value.trim().replace(/[^a-zA-Z0-9]/g,"").slice(0,5); }
 function cleanName() { return `${gameName()}#${gameTag()}`; }
 function validRiotId() { return gameName().length>=3 && gameTag().length>=3; }
+function validInviteCode() { return inviteCodeInput.value.trim().length>=4; }
 function formatWeekDate(value) { const [y,m,d] = value.split("-").map(Number); return new Intl.DateTimeFormat("es-AR", { day:"numeric", month:"short" }).format(new Date(y,m-1,d)); }
 function dayDate(index) { const date = new Date(`${weekStart()}T00:00:00Z`); date.setUTCDate(date.getUTCDate()+index); return { year:date.getUTCFullYear(), month:date.getUTCMonth(), day:date.getUTCDate() }; }
 function slotsForDay(index) {
@@ -68,20 +75,26 @@ noButton.addEventListener("click", () => {
 yesButton.addEventListener("click", async () => {
   const submittedGameName=gameName(), submittedTag=gameTag();
   currentName=cleanName();
-  if(!validRiotId()){$("#name-error").textContent="Ingresá tu GameName y Tag completos.";nameInput.focus();return;}
+  currentInviteCode=inviteCodeInput.value.trim();
+  if(!validRiotId()||!validInviteCode()){$("#name-error").textContent="Ingresá tu Riot ID y el código de invitación.";(!validRiotId()?nameInput:inviteCodeInput).focus();return;}
+  yesButton.disabled=true;$("#name-error").textContent="Verificando invitación…";
+  try {
+    const joined=await remoteStore.join(currentName,currentInviteCode,loadOwnerToken(currentName));
+    currentOwnerToken=joined?.ownerToken||loadOwnerToken(currentName);
+    if(joined?.ownerToken)saveOwnerToken(currentName,joined.ownerToken);
+  } catch(error) {
+    $("#name-error").textContent=error.status===409?"Ese invocador ya pertenece a otro dispositivo.":"Código inválido o demasiados intentos. Probá nuevamente.";
+    validateRiotId();return;
+  }
   localStorage.setItem(savedRiotIdKey,JSON.stringify({gameName:submittedGameName,tagLine:submittedTag}));
   sessionStorage.setItem("salelol-name",currentName);
   if(!currentPlayer()) state.players.push({name:currentName,slots:[],lockedIn:false,joinedAt:Date.now()});
   persist();inviteView.classList.add("hidden");lobbyView.classList.remove("hidden");render();
-  const [joinResult,profileResult]=await Promise.allSettled([
-    remoteStore.join(currentName),
-    remoteStore.fetchRiotProfile(submittedGameName,submittedTag)
-  ]);
-  if(joinResult.status==="rejected")console.error("Player join failed",joinResult.reason);
+  const profileResult=await Promise.resolve(remoteStore.fetchRiotProfile(submittedGameName,submittedTag,currentInviteCode)).then(value=>({status:"fulfilled",value}),reason=>({status:"rejected",reason}));
   if(profileResult.status==="fulfilled"){
     applyProfile(currentPlayer(),profileResult.value);
     render();
-    if(joinResult.status==="fulfilled")await pollForRiotProfile(currentName);
+    await pollForRiotProfile(currentName);
   }else{
     console.error("Riot profile unavailable; lobby access preserved",profileResult.reason);
     await refreshRemote().catch(console.error);
@@ -89,18 +102,19 @@ yesButton.addEventListener("click", async () => {
 });
 function validateRiotId(){
   $("#name-error").textContent="";
-  yesButton.disabled=!validRiotId();
+  yesButton.disabled=!validRiotId()||!validInviteCode();
 }
 nameInput.addEventListener("input",validateRiotId);
 tagInput.addEventListener("input",()=>{tagInput.value=gameTag();validateRiotId();});
+inviteCodeInput.addEventListener("input",validateRiotId);
 window.addEventListener("beforeinstallprompt",event=>{event.preventDefault();installPrompt=event;installButton.classList.add("visible");});
 window.addEventListener("appinstalled",()=>{installPrompt=null;installButton.classList.remove("visible");});
 installButton.addEventListener("click",async()=>{if(installPrompt){installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;installButton.classList.remove("visible");return;}const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);alert(ios?"En Safari, tocá Compartir y después ‘Agregar a pantalla de inicio’.":"Abrí el menú del navegador y elegí ‘Agregar a pantalla de inicio’ o ‘Instalar aplicación’.");});
 $("#app-tabs").addEventListener("click",event=>{const button=event.target.closest("[data-tab]");if(!button)return;document.querySelectorAll(".app-tab").forEach(tab=>{const active=tab===button;tab.classList.toggle("active",active);tab.setAttribute("aria-selected",String(active));});document.querySelectorAll(".tab-panel").forEach(panel=>panel.classList.toggle("hidden",panel.id!==button.dataset.tab));});
 $("#day-tabs").addEventListener("click",event=>{const button=event.target.closest("[data-day]");if(!button)return;selectedDay=Number(button.dataset.day);render();});
 $("#time-slots").addEventListener("click",event=>{const slot=event.target.closest(".slot");if(!slot)return;if(!availabilityDirty)draftSlots=new Set(currentPlayer()?.slots||[]);draftSlots.has(slot.dataset.time)?draftSlots.delete(slot.dataset.time):draftSlots.add(slot.dataset.time);availabilityDirty=true;renderTimeGrid();});
-$("#save-availability").addEventListener("click",async()=>{const player=currentPlayer();if(!player)return;if(!availabilityDirty)draftSlots=new Set(player.slots||[]);player.slots=[...draftSlots];persist();render();try{await remoteStore.saveSlots(currentName,player.slots);availabilityDirty=false;await refreshRemote();$("#save-message").textContent="Semana guardada. GG.";}catch(error){console.error(error);}setTimeout(()=>{$("#save-message").textContent="";},2200);});
-$("#lock-button").addEventListener("click",async()=>{const player=currentPlayer();if(!player)return;player.lockedIn=!player.lockedIn;persist();render();try{await remoteStore.setLocked(currentName,player.lockedIn);await refreshRemote();}catch(error){console.error(error);}});
+$("#save-availability").addEventListener("click",async()=>{const player=currentPlayer();if(!player)return;if(!availabilityDirty)draftSlots=new Set(player.slots||[]);const previous=player.slots;player.slots=[...draftSlots];persist();render();try{await remoteStore.saveSlots(currentName,player.slots,currentOwnerToken);availabilityDirty=false;await refreshRemote();$("#save-message").textContent="Semana guardada. GG.";}catch(error){player.slots=previous;persist();render();$("#save-message").textContent="No se pudo guardar. Volvé a ingresar al lobby.";}setTimeout(()=>{$("#save-message").textContent="";},2200);});
+$("#lock-button").addEventListener("click",async()=>{const player=currentPlayer();if(!player)return;const previous=player.lockedIn;player.lockedIn=!player.lockedIn;persist();render();try{await remoteStore.setLocked(currentName,player.lockedIn,currentOwnerToken);await refreshRemote();}catch(error){player.lockedIn=previous;persist();render();}});
 
 function render(){
   const players=[...state.players].sort((a,b)=>a.joinedAt-b.joinedAt);

@@ -1,10 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
-
-const cors = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+import { adminClient, cors, json, rateLimit, validInvitation } from "../_shared/security.ts";
 const tiers = ["IRON", "BRONZE", "SILVER", "GOLD", "PLATINUM", "EMERALD", "DIAMOND", "MASTER", "GRANDMASTER", "CHALLENGER"];
 const divisions: Record<string, number> = { IV: 1, III: 2, II: 3, I: 4 };
 
@@ -16,9 +10,6 @@ class RiotError extends Error {
   ) {
     super(`Riot API returned ${status} during ${stage}`);
   }
-}
-function json(body: unknown, status = 200) {
-  return Response.json(body, { status, headers: cors });
 }
 function publicProfile(row: Record<string, unknown>) {
   return {
@@ -38,7 +29,13 @@ Deno.serve(async (request) => {
 
   let keyFormatValid = false;
   try {
-    const { gameName, tagLine, force: requestedForce = false } = await request.json();
+    const { gameName, tagLine, invitationCode, force: requestedForce = false } = await request.json();
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const canForce = request.headers.get("authorization") === `Bearer ${serviceRoleKey}`;
+    if (!canForce) {
+      if (!await rateLimit(request, "riot-profile", 10, 60)) return json({ error:"Too many profile lookups" }, 429);
+      if (!await validInvitation(invitationCode)) return json({ error:"Invalid invitation" }, 403);
+    }
     if (typeof gameName !== "string" || gameName.trim().length < 3 || typeof tagLine !== "string" || !/^[a-zA-Z0-9]{3,5}$/.test(tagLine.trim())) {
       return json({ error: "A valid GameName and Tag are required" }, 400);
     }
@@ -46,9 +43,7 @@ Deno.serve(async (request) => {
     const riotKey = Deno.env.get("RIOT_API_KEY")?.trim();
     if (!riotKey) return json({ error: "RIOT_API_KEY has not been configured" }, 500);
     keyFormatValid = riotKey.startsWith("RGAPI-") && riotKey.length > 20;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, serviceRoleKey);
-    const canForce = request.headers.get("authorization") === `Bearer ${serviceRoleKey}`;
+    const supabase = adminClient();
     const force = requestedForce === true && canForce;
     const requestedId = `${gameName.trim()}#${tagLine.trim()}`;
     const normalized = requestedId.toLocaleLowerCase();

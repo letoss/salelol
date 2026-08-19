@@ -14,7 +14,7 @@ function weekStart() {
 function endpoint(table, query = "") { return `${config.supabaseUrl.replace(/\/$/, "")}/rest/v1/${table}${query}`; }
 async function request(url, options = {}) {
   const response = await fetch(url, { ...options, headers:{ ...headers, ...options.headers } });
-  if (!response.ok) throw new Error((await response.text()) || `Supabase error ${response.status}`);
+  if (!response.ok) { const error=new Error((await response.text())||`Supabase error ${response.status}`);error.status=response.status;throw error; }
   return response.status === 204 ? null : response.json();
 }
 export const remoteStore = {
@@ -37,18 +37,14 @@ export const remoteStore = {
       };
     }) };
   },
-  async join(name) {
-    return request(endpoint("players", "?on_conflict=game_date,name"), { method:"POST", headers:{ Prefer:"resolution=ignore-duplicates,return=minimal" }, body:JSON.stringify({ game_date:weekStart(), name }) });
+  async invoke(functionName, body) {
+    if (!enabled) return null;
+    return request(`${config.supabaseUrl.replace(/\/$/, "")}/functions/v1/${functionName}`, { method:"POST", body:JSON.stringify(body) });
   },
-  async saveSlots(name, slots) { return this.update(name, { slots }); },
-  async setLocked(name, lockedIn) { return this.update(name, { locked_in:lockedIn }); },
-  async fetchRiotProfile(gameName, tagLine) {
-    return request(`${config.supabaseUrl.replace(/\/$/, "")}/functions/v1/riot-profile`, {
-      method:"POST", body:JSON.stringify({ gameName, tagLine })
-    });
+  async join(name, invitationCode, ownerToken) {
+    return this.invoke("lobby-join", { name, invitationCode, ownerToken });
   },
-  async update(name, body) {
-    const week = encodeURIComponent(weekStart());
-    return request(endpoint("players", `?game_date=eq.${week}&name=eq.${encodeURIComponent(name)}`), { method:"PATCH", headers:{ Prefer:"return=minimal" }, body:JSON.stringify(body) });
-  }
+  async saveSlots(name, slots, ownerToken) { return this.invoke("lobby-update", { name, slots, ownerToken }); },
+  async setLocked(name, lockedIn, ownerToken) { return this.invoke("lobby-update", { name, lockedIn, ownerToken }); },
+  async fetchRiotProfile(gameName, tagLine, invitationCode) { return this.invoke("riot-profile", { gameName, tagLine, invitationCode }); }
 };
