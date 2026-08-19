@@ -24,7 +24,7 @@ export const remoteStore = {
     const week = encodeURIComponent(weekStart());
     const players = await request(endpoint("players", `?game_date=eq.${week}&select=name,slots,locked_in,joined_at&order=joined_at.asc`));
     let profiles = [];
-    try { profiles = await request(endpoint("riot_profiles", "?select=riot_id,profile_icon_url,rank_tier,rank_display,recent_games")); }
+    try { profiles = await request(endpoint("riot_profiles", "?select=riot_id,profile_icon_url,rank_tier,rank_display,recent_games,recent_match_summaries")); }
     catch (error) { console.warn("Riot profiles are not configured yet", error); }
     const byId = new Map(profiles.map(profile => [profile.riot_id.toLowerCase(), profile]));
     return { date:weekStart(), players:players.map(player => {
@@ -33,7 +33,8 @@ export const remoteStore = {
         name:player.name, slots:player.slots || [], lockedIn:Boolean(player.locked_in),
         joinedAt:new Date(player.joined_at).getTime(), profileIconUrl:profile?.profile_icon_url,
         rankTier:profile?.rank_tier, rankDisplay:profile?.rank_display,
-        recentGames:profile?.recent_games || []
+        recentGames:profile?.recent_games || [],
+        recentMatchSummaries:profile?.recent_match_summaries || []
       };
     }) };
   },
