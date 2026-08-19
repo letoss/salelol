@@ -25,7 +25,11 @@ export const remoteStore = {
     const players = await request(endpoint("players", `?game_date=eq.${week}&select=name,slots,locked_in,joined_at&order=joined_at.asc`));
     let profiles = [];
     try { profiles = await request(endpoint("riot_profiles", "?select=riot_id,profile_icon_url,rank_tier,rank_display,recent_games,recent_match_summaries")); }
-    catch (error) { console.warn("Riot profiles are not configured yet", error); }
+    catch (error) {
+      console.warn("Recent match summaries are not configured yet; loading basic profiles", error);
+      try { profiles = await request(endpoint("riot_profiles", "?select=riot_id,profile_icon_url,rank_tier,rank_display,recent_games")); }
+      catch (fallbackError) { console.warn("Riot profiles are not configured yet", fallbackError); }
+    }
     const byId = new Map(profiles.map(profile => [profile.riot_id.toLowerCase(), profile]));
     return { date:weekStart(), players:players.map(player => {
       const profile = byId.get(player.name.toLowerCase());
