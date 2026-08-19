@@ -180,13 +180,16 @@ function latestSharedGame(players){
   return [...groups.values()].filter(game=>game.participants.length>=2).sort((a,b)=>b.gameCreation-a.gameCreation)[0]||null;
 }
 function kdaScore(match){return (Number(match.kills)+Number(match.assists))/Math.max(1,Number(match.deaths));}
+function stableMatchChoice(matchId,count){let hash=0;for(const character of String(matchId))hash=((hash<<5)-hash+character.charCodeAt(0))|0;return Math.abs(hash)%count;}
 function renderSharedGame(players){
   const card=$("#shared-game-card"),banner=$("#shared-game-banner");
   const game=latestSharedGame(players);
   if(!game){card.classList.add("hidden");banner.innerHTML="";return;}
   const won=game.participants.every(item=>item.match.win===true);
   const worst=[...game.participants].sort((a,b)=>kdaScore(a.match)-kdaScore(b.match)||Number(b.match.deaths)-Number(a.match.deaths)||Number(a.match.kills)-Number(b.match.kills))[0];
-  const headline=won?"Siempre confié en este team":`Report ${worst.player.name.split("#")[0]}`;
+  const best=[...game.participants].sort((a,b)=>kdaScore(b.match)-kdaScore(a.match)||Number(b.match.kills)-Number(a.match.kills)||Number(a.match.deaths)-Number(b.match.deaths))[0];
+  const winHeadlines=["Siempre confie en este team","Aaahhhh IZI",`Carriados por ${best.player.name.split("#")[0]}`];
+  const headline=won?winHeadlines[stableMatchChoice(game.matchId,winHeadlines.length)]:`Report ${worst.player.name.split("#")[0]}`;
   const score=`${Number(game.participants[0].match.teamKills)||0} – ${Number(game.participants[0].match.opponentKills)||0}`;
   const rows=game.participants.map(({player,match})=>{
     const avatar=player.profileIconUrl?`<img src="${escapeHtml(player.profileIconUrl)}" alt="" />`:`<span>${escapeHtml(player.name[0].toUpperCase())}</span>`;
