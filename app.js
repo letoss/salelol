@@ -19,6 +19,7 @@ const lobbyView = $("#lobby-view");
 const nameInput = $("#summoner-name");
 const tagInput = $("#summoner-tag");
 const inviteCodeInput = $("#invite-code");
+const toggleInviteCode = $("#toggle-invite-code");
 const yesButton = $("#yes-button");
 const noButton = $("#no-button");
 const answerZone = $("#answer-zone");
@@ -107,6 +108,7 @@ function validateRiotId(){
 nameInput.addEventListener("input",validateRiotId);
 tagInput.addEventListener("input",()=>{tagInput.value=gameTag();validateRiotId();});
 inviteCodeInput.addEventListener("input",validateRiotId);
+toggleInviteCode.addEventListener("click",()=>{const visible=inviteCodeInput.type==="text";inviteCodeInput.type=visible?"password":"text";toggleInviteCode.textContent=visible?"MOSTRAR":"OCULTAR";toggleInviteCode.setAttribute("aria-pressed",String(!visible));toggleInviteCode.setAttribute("aria-label",visible?"Mostrar código de invitación":"Ocultar código de invitación");inviteCodeInput.focus();});
 window.addEventListener("beforeinstallprompt",event=>{event.preventDefault();installPrompt=event;installButton.classList.add("visible");});
 window.addEventListener("appinstalled",()=>{installPrompt=null;installButton.classList.remove("visible");});
 installButton.addEventListener("click",async()=>{if(installPrompt){installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;installButton.classList.remove("visible");return;}const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);alert(ios?"En Safari, tocá Compartir y después ‘Agregar a pantalla de inicio’.":"Abrí el menú del navegador y elegí ‘Agregar a pantalla de inicio’ o ‘Instalar aplicación’.");});

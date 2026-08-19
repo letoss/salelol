@@ -32,7 +32,10 @@
           </label>
           <label class="name-field invite-code-field">
             <span>Código de invitación</span>
-            <input id="invite-code" type="password" minlength="4" maxlength="128" autocomplete="current-password" placeholder="Código del lobby" required />
+            <span class="secret-input">
+              <input id="invite-code" type="password" minlength="4" maxlength="128" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Código del lobby" required />
+              <button id="toggle-invite-code" type="button" aria-label="Mostrar código de invitación" aria-pressed="false">MOSTRAR</button>
+            </span>
           </label>
           <p id="name-error" class="error" role="alert"></p>
           <div id="answer-zone" class="answer-zone">
