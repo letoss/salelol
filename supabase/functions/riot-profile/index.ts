@@ -6,6 +6,7 @@ const adminClient=()=>createClient(Deno.env.get("SUPABASE_URL")!,Deno.env.get("S
 async function hash(value:string){const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value));return [...new Uint8Array(digest)].map(byte=>byte.toString(16).padStart(2,"0")).join("");}
 async function rateLimit(request:Request,scope:string,limit:number,windowSeconds:number){const address=request.headers.get("cf-connecting-ip")||request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()||"unknown";const identifier=await hash(`${scope}:${address}`);const {data,error}=await adminClient().rpc("consume_api_rate_limit",{rate_scope:scope,rate_identifier:identifier,rate_limit:limit,window_seconds:windowSeconds});if(error)throw error;return Boolean(data);}
 async function validInvitation(code:unknown){const expected=Deno.env.get("LOBBY_INVITE_TOKEN")||"";return Boolean(expected&&typeof code==="string"&&await hash(code.trim())===await hash(expected));}
+function currentWeekStart(){const parts=new Intl.DateTimeFormat("en-GB",{timeZone:"Europe/Amsterdam",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date());const value=Object.fromEntries(parts.map(part=>[part.type,part.value]));const date=new Date(Date.UTC(+value.year,+value.month-1,+value.day));const reset=date.getUTCDay()===0&&+value.hour===23&&+value.minute>=59;const daysSinceMonday=(date.getUTCDay()+6)%7;date.setUTCDate(date.getUTCDate()+(reset?1:-daysSinceMonday));return date.toISOString().slice(0,10);}
 const tiers = ["IRON", "BRONZE", "SILVER", "GOLD", "PLATINUM", "EMERALD", "DIAMOND", "MASTER", "GRANDMASTER", "CHALLENGER"];
 const divisions: Record<string, number> = { IV: 1, III: 2, II: 3, I: 4 };
 
@@ -37,7 +38,7 @@ Deno.serve(async (request) => {
 
   let keyFormatValid = false;
   try {
-    const { gameName, tagLine, invitationCode, force: requestedForce = false } = await request.json();
+    const { gameName, tagLine, invitationCode, cascade = true } = await request.json();
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const canForce = request.headers.get("authorization") === `Bearer ${serviceRoleKey}`;
     if (!canForce) {
@@ -52,12 +53,8 @@ Deno.serve(async (request) => {
     if (!riotKey) return json({ error: "RIOT_API_KEY has not been configured" }, 500);
     keyFormatValid = riotKey.startsWith("RGAPI-") && riotKey.length > 20;
     const supabase = adminClient();
-    const force = requestedForce === true && canForce;
     const requestedId = `${gameName.trim()}#${tagLine.trim()}`;
     const normalized = requestedId.toLocaleLowerCase();
-
-    const { data: cached } = await supabase.from("riot_profiles").select("*").eq("riot_id_normalized", normalized).maybeSingle();
-    if (!force && cached && Date.now() - new Date(cached.refreshed_at).getTime() < 30 * 60 * 1000) return json(publicProfile(cached));
 
     const riot = async (stage: string, url: string) => {
       const response = await fetch(url, { headers: { "X-Riot-Token": riotKey } });
@@ -120,6 +117,39 @@ Deno.serve(async (request) => {
     };
     const { error } = await supabase.from("riot_profiles").upsert(row, { onConflict: "riot_id_normalized" });
     if (error) console.error("Cache write failed", error);
+
+    if (cascade !== false) {
+      const latestResult = matches.find((result) => result.status === "fulfilled");
+      const latestParticipants = latestResult?.status === "fulfilled" && Array.isArray(latestResult.value.info?.participants)
+        ? latestResult.value.info.participants
+        : [];
+      const me = latestParticipants.find((participant: Record<string, unknown>) => participant.puuid === account.puuid);
+      const teammatePuuids = new Set(latestParticipants
+        .filter((participant: Record<string, unknown>) => participant.puuid !== account.puuid && participant.teamId === me?.teamId)
+        .map((participant: Record<string, unknown>) => String(participant.puuid)));
+
+      if (teammatePuuids.size) {
+        const { data: registeredPlayers } = await supabase.from("players").select("name").eq("game_date", currentWeekStart());
+        const registeredIds = [...new Set((registeredPlayers || []).map((player) => String(player.name).toLocaleLowerCase()))];
+        if (registeredIds.length) {
+          const { data: registeredProfiles } = await supabase.from("riot_profiles").select("riot_id,puuid").in("riot_id_normalized", registeredIds);
+          const teammates = (registeredProfiles || []).filter((profile) => teammatePuuids.has(String(profile.puuid)));
+          const projectUrl = Deno.env.get("SUPABASE_URL")!;
+          await Promise.allSettled(teammates.map(async (profile) => {
+            const riotId = String(profile.riot_id);
+            const separator = riotId.lastIndexOf("#");
+            if (separator < 1) return;
+            const response = await fetch(`${projectUrl}/functions/v1/riot-profile`, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${serviceRoleKey}`, apikey: serviceRoleKey, "Content-Type": "application/json" },
+              body: JSON.stringify({ gameName: riotId.slice(0, separator), tagLine: riotId.slice(separator + 1), cascade: false }),
+            });
+            if (!response.ok) console.error("Teammate refresh failed", riotId, response.status, await response.text());
+          }));
+        }
+      }
+    }
+
     return json(publicProfile(row));
   } catch (error) {
     console.error(error);
