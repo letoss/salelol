@@ -71,6 +71,7 @@ Deno.serve(async (request) => {
         gameName: riotId.slice(0, separator),
         tagLine: riotId.slice(separator + 1),
         force: true,
+        cascade: false,
       }),
     });
 
