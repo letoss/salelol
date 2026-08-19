@@ -26,6 +26,7 @@ function publicProfile(row: Record<string, unknown>) {
     rankDisplay: row.rank_display,
     queue: row.ranked_queue,
     recentGames: row.recent_games || [],
+    recentMatchSummaries: row.recent_match_summaries || [],
     cachedAt: row.refreshed_at,
   };
 }
@@ -77,11 +78,31 @@ Deno.serve(async (request) => {
 
     const matchIds = await riot("match-list", `https://europe.api.riotgames.com/lol/match/v5/matches/by-puuid/${encodeURIComponent(account.puuid)}/ids?start=0&count=5`);
     const matches = await Promise.allSettled(matchIds.map((id: string) => riot("match-detail", `https://europe.api.riotgames.com/lol/match/v5/matches/${encodeURIComponent(id)}`)));
-    const recentGames = matches.flatMap((result) => {
+    const recentMatchSummaries = matches.flatMap((result) => {
       if (result.status !== "fulfilled") return [];
-      const participant = result.value.info?.participants?.find((item: Record<string, unknown>) => item.puuid === account.puuid);
-      return participant ? [Boolean(participant.win)] : [];
-    });
+      const info = result.value.info;
+      const participants = Array.isArray(info?.participants) ? info.participants : [];
+      const participant = participants.find((item: Record<string, unknown>) => item.puuid === account.puuid);
+      if (!participant) return [];
+      const teamId = Number(participant.teamId);
+      const killsForTeam = (id: number) => participants
+        .filter((item: Record<string, unknown>) => Number(item.teamId) === id)
+        .reduce((total: number, item: Record<string, unknown>) => total + Number(item.kills || 0), 0);
+      const opponent = participants.find((item: Record<string, unknown>) => Number(item.teamId) !== teamId);
+      return [{
+        matchId: String(result.value.metadata?.matchId || ""),
+        gameCreation: Number(info?.gameCreation || 0),
+        teamId,
+        win: Boolean(participant.win),
+        championName: String(participant.championName || ""),
+        kills: Number(participant.kills || 0),
+        deaths: Number(participant.deaths || 0),
+        assists: Number(participant.assists || 0),
+        teamKills: killsForTeam(teamId),
+        opponentKills: opponent ? killsForTeam(Number(opponent.teamId)) : 0,
+      }];
+    }).filter((match) => match.matchId);
+    const recentGames = recentMatchSummaries.map((match) => match.win);
 
     const versions = await (await fetch("https://ddragon.leagueoflegends.com/api/versions.json")).json();
     const canonicalId = `${account.gameName}#${account.tagLine}`;
@@ -94,6 +115,7 @@ Deno.serve(async (request) => {
       rank_display: highest ? `${highest.tier} ${highest.rank}` : null,
       ranked_queue: highest?.queueType || null,
       recent_games: recentGames,
+      recent_match_summaries: recentMatchSummaries,
       refreshed_at: new Date().toISOString(),
     };
     const { error } = await supabase.from("riot_profiles").upsert(row, { onConflict: "riot_id_normalized" });
