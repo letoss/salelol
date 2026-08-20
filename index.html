@@ -48,32 +48,36 @@
       </section>
 
       <section id="lobby-view" class="view lobby-view hidden" aria-labelledby="lobby-title">
-        <section id="clash-notice" class="clash-notice panel hidden" aria-live="polite"></section>
         <header class="lobby-header panel">
-          <div>
-            <span class="eyebrow">SALA PERSONALIZADA</span>
-            <h1 id="lobby-title">El lobby de los mancos</h1>
-            <p id="today-label" class="subtitle"></p>
+          <div class="lobby-header-main">
+            <div>
+              <span class="eyebrow">SALA PERSONALIZADA</span>
+              <h1 id="lobby-title">El lobby de los mancos</h1>
+              <p id="today-label" class="subtitle"></p>
+            </div>
+            <div class="online-pill"><span></span><strong id="player-count">0</strong> invocadores</div>
           </div>
-          <div class="online-pill"><span></span><strong id="player-count">0</strong> invocadores</div>
+          <section id="clash-notice" class="clash-notice hidden" aria-live="polite"></section>
         </header>
 
-        <section class="panel section-card manco-card top-manco-card">
-          <div class="section-heading">
-            <div><span class="step">TOP</span><h2>Mancos de la semana</h2></div>
-            <p>Ranking según las últimas cinco partidas.</p>
-          </div>
-          <div id="manco-ranking" class="manco-ranking"></div>
-        </section>
-
         <nav id="app-tabs" class="app-tabs" role="tablist" aria-label="Secciones del lobby">
-          <button class="app-tab active" type="button" role="tab" data-tab="games-tab" aria-controls="games-tab" aria-selected="true">PARTIDAS RECIENTES</button>
-          <button class="app-tab" type="button" role="tab" data-tab="lobby-tab" aria-controls="lobby-tab" aria-selected="false">LOBBY</button>
-          <button class="app-tab" type="button" role="tab" data-tab="calendar-tab" aria-controls="calendar-tab" aria-selected="false">CALENDARIO</button>
-          <button class="app-tab" type="button" role="tab" data-tab="availability-tab" aria-controls="availability-tab" aria-selected="false">MI DISPONIBILIDAD</button>
+          <button class="app-tab active" type="button" role="tab" data-tab="games-tab" data-route="partidas-recientes" aria-controls="games-tab" aria-selected="true">PARTIDAS RECIENTES</button>
+          <button class="app-tab" type="button" role="tab" data-tab="lobby-tab" data-route="lobby" aria-controls="lobby-tab" aria-selected="false">LOBBY</button>
+          <button class="app-tab" type="button" role="tab" data-tab="calendar-tab" data-route="calendario" aria-controls="calendar-tab" aria-selected="false">CALENDARIO</button>
+          <button class="app-tab" type="button" role="tab" data-tab="availability-tab" data-route="mi-disponibilidad" aria-controls="availability-tab" aria-selected="false">MI DISPONIBILIDAD</button>
         </nav>
 
         <div id="games-tab" class="tab-panel" role="tabpanel">
+          <section id="manco-card" class="panel section-card manco-card collapsible-manco-card">
+            <button id="manco-toggle" class="manco-toggle" type="button" aria-expanded="true" aria-controls="manco-content">
+              <span><span class="step">TOP</span><strong>Mancos de la semana</strong></span>
+              <i aria-hidden="true"></i>
+            </button>
+            <div id="manco-content" class="manco-content">
+              <p>Ranking según las últimas cinco partidas.</p>
+              <div id="manco-ranking" class="manco-ranking"></div>
+            </div>
+          </section>
           <section class="panel section-card recent-games-card">
             <div class="section-heading">
               <div><span class="step">10</span><h2>Partidas compartidas</h2></div>

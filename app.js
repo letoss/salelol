@@ -8,6 +8,8 @@ const savedRiotIdKey = "salelol-riot-id";
 const ownerTokensKey = "salelol-owner-tokens";
 const loginCookieKey = "salelol-login-v1";
 const loginCookieMaxAge = 14*24*60*60;
+const mancoExpandedKey = "salelol-manco-expanded";
+const defaultTabRoute = "partidas-recientes";
 const $ = selector => document.querySelector(selector);
 const state = loadState();
 let currentName = "";
@@ -15,6 +17,7 @@ let noClicks = 0;
 let draftSlots = new Set();
 let availabilityDirty = false;
 let selectedDay = (new Date().getDay()+6)%7;
+let mancoExpanded = loadMancoExpanded();
 
 const inviteView = $("#invite-view");
 const lobbyView = $("#lobby-view");
@@ -50,6 +53,7 @@ function weekStart() {
 }
 function loadState() { try { const current=weekStart();const saved=JSON.parse(localStorage.getItem(storeKey));if(!saved)return {date:current,players:[],sharedGames:[]};saved.sharedGames||=[];const legacy=new Date(`${current}T00:00:00Z`);legacy.setUTCDate(legacy.getUTCDate()-1);if(saved.date===legacy.toISOString().slice(0,10)){const validSlots=new Set(dayNames.flatMap((_,day)=>slotsForDay(day).map(slot=>slot.id)));saved.players.forEach(player=>{player.slots=(player.slots||[]).filter(slot=>validSlots.has(slot));});saved.date=current;}return saved; } catch { return { date:weekStart(), players:[],sharedGames:[] }; } }
 function loadSavedRiotId() { try { const value=JSON.parse(localStorage.getItem(savedRiotIdKey));return {gameName:value?.gameName||"",tagLine:value?.tagLine||""}; } catch { return {gameName:"",tagLine:""}; } }
+function loadMancoExpanded(){return localStorage.getItem(mancoExpandedKey)!=="false";}
 function loadLoginCookie(){try{const prefix=`${loginCookieKey}=`;const raw=document.cookie.split(";").map(value=>value.trim()).find(value=>value.startsWith(prefix));if(!raw)return null;const value=JSON.parse(decodeURIComponent(raw.slice(prefix.length)));if(typeof value?.gameName!=="string"||typeof value?.tagLine!=="string"||typeof value?.invitationCode!=="string")return null;return value;}catch{return null;}}
 function saveLoginCookie(gameName,tagLine,invitationCode){const secure=location.protocol==="https:"?"; Secure":"";const value=encodeURIComponent(JSON.stringify({gameName,tagLine,invitationCode}));document.cookie=`${loginCookieKey}=${value}; Max-Age=${loginCookieMaxAge}; Path=/; SameSite=Strict${secure}`;}
 function loadOwnerToken(name) { try { return JSON.parse(localStorage.getItem(ownerTokensKey))?.[name.toLowerCase()]||""; } catch { return ""; } }
@@ -120,7 +124,19 @@ toggleInviteCode.addEventListener("click",()=>{const visible=inviteCodeInput.typ
 window.addEventListener("beforeinstallprompt",event=>{event.preventDefault();installPrompt=event;installButton.classList.add("visible");});
 window.addEventListener("appinstalled",()=>{installPrompt=null;installButton.classList.remove("visible");});
 installButton.addEventListener("click",async()=>{if(installPrompt){installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;installButton.classList.remove("visible");return;}const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);alert(ios?"En Safari, tocá Compartir y después ‘Agregar a pantalla de inicio’.":"Abrí el menú del navegador y elegí ‘Agregar a pantalla de inicio’ o ‘Instalar aplicación’.");});
-$("#app-tabs").addEventListener("click",event=>{const button=event.target.closest("[data-tab]");if(!button)return;document.querySelectorAll(".app-tab").forEach(tab=>{const active=tab===button;tab.classList.toggle("active",active);tab.setAttribute("aria-selected",String(active));});document.querySelectorAll(".tab-panel").forEach(panel=>panel.classList.toggle("hidden",panel.id!==button.dataset.tab));});
+function syncTabRoute(){
+  const requestedRoute=location.hash.match(/^#\/([^/?]+)/)?.[1];
+  const route=requestedRoute||defaultTabRoute;
+  const tabs=[...document.querySelectorAll(".app-tab")];
+  const button=tabs.find(tab=>tab.dataset.route===route)||tabs.find(tab=>tab.dataset.route===defaultTabRoute);
+  document.querySelectorAll(".app-tab").forEach(tab=>{const active=tab===button;tab.classList.toggle("active",active);tab.setAttribute("aria-selected",String(active));tab.tabIndex=active?0:-1;});
+  document.querySelectorAll(".tab-panel").forEach(panel=>panel.classList.toggle("hidden",panel.id!==button.dataset.tab));
+  if(!requestedRoute||route!==button.dataset.route)history.replaceState(null,"",`${location.pathname}${location.search}#/${button.dataset.route}`);
+}
+function renderMancoCollapse(){const toggle=$("#manco-toggle"),content=$("#manco-content"),card=$("#manco-card");toggle.setAttribute("aria-expanded",String(mancoExpanded));content.classList.toggle("hidden",!mancoExpanded);card.classList.toggle("is-collapsed",!mancoExpanded);}
+$("#app-tabs").addEventListener("click",event=>{const button=event.target.closest("[data-tab]");if(!button)return;const hash=`#/${button.dataset.route}`;if(location.hash===hash)syncTabRoute();else location.hash=hash;});
+$("#manco-toggle").addEventListener("click",()=>{mancoExpanded=!mancoExpanded;localStorage.setItem(mancoExpandedKey,String(mancoExpanded));renderMancoCollapse();});
+window.addEventListener("hashchange",syncTabRoute);
 $("#day-tabs").addEventListener("click",event=>{const button=event.target.closest("[data-day]");if(!button)return;selectedDay=Number(button.dataset.day);render();});
 $("#time-slots").addEventListener("click",event=>{const slot=event.target.closest(".slot");if(!slot)return;if(!availabilityDirty)draftSlots=new Set(currentPlayer()?.slots||[]);draftSlots.has(slot.dataset.time)?draftSlots.delete(slot.dataset.time):draftSlots.add(slot.dataset.time);availabilityDirty=true;renderTimeGrid();});
 $("#save-availability").addEventListener("click",async()=>{const player=currentPlayer();if(!player)return;if(!availabilityDirty)draftSlots=new Set(player.slots||[]);const previous=player.slots;player.slots=[...draftSlots];persist();render();try{await remoteStore.saveSlots(currentName,player.slots,currentOwnerToken);availabilityDirty=false;await refreshRemote();$("#save-message").textContent="Semana guardada. GG.";}catch(error){player.slots=previous;persist();render();$("#save-message").textContent="No se pudo guardar. Volvé a ingresar al lobby.";}setTimeout(()=>{$("#save-message").textContent="";},2200);});
@@ -222,6 +238,8 @@ async function refreshRemote(){const remote=await remoteStore.load();if(!remote)
 window.addEventListener("storage",event=>{if(event.key===storeKey&&event.newValue){Object.assign(state,JSON.parse(event.newValue));render();}});
 if(remoteStore.enabled){refreshRemote().catch(console.error);setInterval(()=>refreshRemote().catch(console.error),5000);}
 validateRiotId();
+syncTabRoute();
+renderMancoCollapse();
 if(savedCredentials&&validRiotId()&&validInviteCode())queueMicrotask(()=>yesButton.click());
 if(matchMedia("(display-mode: standalone)").matches||navigator.standalone){installButton.classList.remove("visible");}else if(/android|iphone|ipad|ipod/i.test(navigator.userAgent)){installButton.classList.add("visible");}
 if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js").catch(console.error));}
