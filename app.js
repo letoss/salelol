@@ -6,6 +6,8 @@ const colors = ["#0ac8b9", "#c89b3c", "#d979c7", "#65a9ff", "#ef6b62", "#8bd450"
 const storeKey = "salelol-state-v2";
 const savedRiotIdKey = "salelol-riot-id";
 const ownerTokensKey = "salelol-owner-tokens";
+const loginCookieKey = "salelol-login-v1";
+const loginCookieMaxAge = 14*24*60*60;
 const $ = selector => document.querySelector(selector);
 const state = loadState();
 let currentName = "";
@@ -24,12 +26,14 @@ const yesButton = $("#yes-button");
 const noButton = $("#no-button");
 const answerZone = $("#answer-zone");
 const installButton = $("#install-button");
-const savedRiotId = loadSavedRiotId();
+const savedCredentials = loadLoginCookie();
+const savedRiotId = savedCredentials || loadSavedRiotId();
 let installPrompt = null;
 let currentOwnerToken = "";
 let currentInviteCode = "";
 nameInput.value = savedRiotId.gameName;
 tagInput.value = savedRiotId.tagLine;
+inviteCodeInput.value = savedCredentials?.invitationCode || "";
 $("#today-label").textContent = `Semana del ${formatWeekDate(weekStart())}`;
 
 function amsterdamParts() {
@@ -46,6 +50,8 @@ function weekStart() {
 }
 function loadState() { try { const current=weekStart();const saved=JSON.parse(localStorage.getItem(storeKey));if(!saved)return {date:current,players:[],sharedGames:[]};saved.sharedGames||=[];const legacy=new Date(`${current}T00:00:00Z`);legacy.setUTCDate(legacy.getUTCDate()-1);if(saved.date===legacy.toISOString().slice(0,10)){const validSlots=new Set(dayNames.flatMap((_,day)=>slotsForDay(day).map(slot=>slot.id)));saved.players.forEach(player=>{player.slots=(player.slots||[]).filter(slot=>validSlots.has(slot));});saved.date=current;}return saved; } catch { return { date:weekStart(), players:[],sharedGames:[] }; } }
 function loadSavedRiotId() { try { const value=JSON.parse(localStorage.getItem(savedRiotIdKey));return {gameName:value?.gameName||"",tagLine:value?.tagLine||""}; } catch { return {gameName:"",tagLine:""}; } }
+function loadLoginCookie(){try{const prefix=`${loginCookieKey}=`;const raw=document.cookie.split(";").map(value=>value.trim()).find(value=>value.startsWith(prefix));if(!raw)return null;const value=JSON.parse(decodeURIComponent(raw.slice(prefix.length)));if(typeof value?.gameName!=="string"||typeof value?.tagLine!=="string"||typeof value?.invitationCode!=="string")return null;return value;}catch{return null;}}
+function saveLoginCookie(gameName,tagLine,invitationCode){const secure=location.protocol==="https:"?"; Secure":"";const value=encodeURIComponent(JSON.stringify({gameName,tagLine,invitationCode}));document.cookie=`${loginCookieKey}=${value}; Max-Age=${loginCookieMaxAge}; Path=/; SameSite=Strict${secure}`;}
 function loadOwnerToken(name) { try { return JSON.parse(localStorage.getItem(ownerTokensKey))?.[name.toLowerCase()]||""; } catch { return ""; } }
 function saveOwnerToken(name,token) { const tokens=JSON.parse(localStorage.getItem(ownerTokensKey)||"{}");tokens[name.toLowerCase()]=token;localStorage.setItem(ownerTokensKey,JSON.stringify(tokens)); }
 function persist() {
@@ -88,6 +94,7 @@ yesButton.addEventListener("click", async () => {
     validateRiotId();return;
   }
   localStorage.setItem(savedRiotIdKey,JSON.stringify({gameName:submittedGameName,tagLine:submittedTag}));
+  saveLoginCookie(submittedGameName,submittedTag,currentInviteCode);
   sessionStorage.setItem("salelol-name",currentName);
   if(!currentPlayer()) state.players.push({name:currentName,slots:[],joinedAt:Date.now()});
   persist();inviteView.classList.add("hidden");lobbyView.classList.remove("hidden");render();
@@ -215,5 +222,6 @@ async function refreshRemote(){const remote=await remoteStore.load();if(!remote)
 window.addEventListener("storage",event=>{if(event.key===storeKey&&event.newValue){Object.assign(state,JSON.parse(event.newValue));render();}});
 if(remoteStore.enabled){refreshRemote().catch(console.error);setInterval(()=>refreshRemote().catch(console.error),5000);}
 validateRiotId();
+if(savedCredentials&&validRiotId()&&validInviteCode())queueMicrotask(()=>yesButton.click());
 if(matchMedia("(display-mode: standalone)").matches||navigator.standalone){installButton.classList.remove("visible");}else if(/android|iphone|ipad|ipod/i.test(navigator.userAgent)){installButton.classList.add("visible");}
 if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js").catch(console.error));}
