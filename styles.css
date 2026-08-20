@@ -81,13 +81,13 @@ input:focus { border-color:var(--gold); box-shadow:0 0 0 2px rgba(200,155,60,.15
 .day-timeline { overflow-x:auto; scrollbar-color:#785a28 rgba(1,10,19,.5); }
 .timeline-axis,.availability-lane { display:grid; grid-template-columns:minmax(88px,16%) minmax(520px,1fr); }
 .timeline-axis { padding:9px 14px 5px; color:#74756f; font-size:.56rem; font-weight:700; letter-spacing:.04em; }
-.timeline-axis>b { align-self:end; font-size:.54rem; }.timeline-axis>div,.availability-track { display:grid; grid-template-columns:repeat(14,minmax(0,1fr)); }
+.timeline-axis>b { align-self:end; font-size:.54rem; }.timeline-axis>div,.availability-track { display:grid; grid-template-columns:repeat(24,minmax(0,1fr)); }
 .timeline-axis span { grid-column:var(--column); transform:translateX(-50%); }.timeline-axis span:last-child { transform:translateX(-100%); text-align:right; }
 .availability-lanes { padding:0 14px 12px; }
 .availability-lanes>p { margin:8px 0 3px; padding:8px; color:var(--muted); font-size:.72rem; text-align:center; }
 .availability-lane { min-height:28px; align-items:center; }
 .availability-lane>strong { overflow:hidden; padding-right:12px; color:var(--lane-color); font-size:.68rem; text-overflow:ellipsis; white-space:nowrap; }
-.availability-track { position:relative; height:16px; background:repeating-linear-gradient(90deg,rgba(160,155,140,.14) 0 1px,transparent 1px calc(100% / 14)); }
+.availability-track { position:relative; height:16px; background:repeating-linear-gradient(90deg,rgba(160,155,140,.14) 0 1px,transparent 1px calc(100% / 24)); }
 .availability-track::after { content:""; position:absolute; inset:7px 0 auto; height:1px; background:rgba(160,155,140,.13); }
 .availability-track i { position:relative; z-index:1; grid-column:var(--start)/var(--end); height:6px; align-self:center; border-radius:999px; background:var(--lane-color); box-shadow:0 0 8px color-mix(in srgb,var(--lane-color) 70%,transparent); }
 .availability-track i::before,.availability-track i::after { content:""; position:absolute; top:50%; width:6px; height:6px; border:2px solid #071a20; border-radius:50%; background:var(--lane-color); transform:translateY(-50%); }.availability-track i::before { left:-1px; }.availability-track i::after { right:-1px; }

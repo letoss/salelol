@@ -67,7 +67,7 @@ function formatWeekDate(value) { const [y,m,d] = value.split("-").map(Number); r
 function dayDate(index) { const date = new Date(`${weekStart()}T00:00:00Z`); date.setUTCDate(date.getUTCDate()+index); return { year:date.getUTCFullYear(), month:date.getUTCMonth(), day:date.getUTCDate() }; }
 function slotsForDay(index) {
   const date = dayDate(index);
-  return Array.from({ length:14 }, (_,offset) => { const hour=offset+10; return { id:new Date(date.year,date.month,date.day,hour).toISOString(), label:`${String(hour).padStart(2,"0")}:00` }; });
+  return Array.from({ length:24 }, (_,hour) => ({ id:new Date(date.year,date.month,date.day,hour).toISOString(), label:`${String(hour).padStart(2,"0")}:00` }));
 }
 function currentPlayer() { return state.players.find(player => player.name.toLowerCase() === currentName.toLowerCase()); }
 function escapeHtml(text) { const element=document.createElement("span"); element.textContent=text; return element.innerHTML; }

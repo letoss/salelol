@@ -18,7 +18,7 @@ Deno.serve(async (request) => {
     const {data:player,error}=await db.from("players").select("owner_token_hash,owner_token_hashes").eq("game_date",week).eq("name",name.trim()).maybeSingle();
     if(error)throw error;const tokenHash=await hash(ownerToken);if(!player||(player.owner_token_hash!==tokenHash&&!(player.owner_token_hashes||[]).includes(tokenHash)))return json({error:"Not your player"},403);
     const update:Record<string,unknown>={last_seen:new Date().toISOString()};
-    if(slots!==undefined){if(!Array.isArray(slots)||slots.length>98||!slots.every((slot)=>typeof slot==="string"&&!Number.isNaN(Date.parse(slot))))return json({error:"Invalid slots"},400);update.slots=[...new Set(slots)];}
+    if(slots!==undefined){if(!Array.isArray(slots)||slots.length>168||!slots.every((slot)=>typeof slot==="string"&&!Number.isNaN(Date.parse(slot))))return json({error:"Invalid slots"},400);update.slots=[...new Set(slots)];}
     if(slots===undefined)return json({error:"Nothing to update"},400);
     const {error:updateError}=await db.from("players").update(update).eq("game_date",week).eq("name",name.trim());if(updateError)throw updateError;
     return json({ok:true});
