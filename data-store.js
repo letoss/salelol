@@ -44,7 +44,8 @@ export const remoteStore = {
   },
   async loadSharedGames() {
     if (!enabled) return [];
-    try { return await request(endpoint("shared_matches", "?select=match_id,game_start,duration_seconds,queue_id,teams,shared_player_count&order=game_start.desc&limit=10")); }
+    const cutoff = encodeURIComponent(new Date(Date.now()-30*24*60*60*1000).toISOString());
+    try { return await request(endpoint("shared_matches", `?select=match_id,game_start,duration_seconds,queue_id,teams,shared_player_count&game_start=gte.${cutoff}&order=game_start.desc`)); }
     catch (error) { console.warn("Shared matches are not configured yet", error); return []; }
   },
   async invoke(functionName, body) {

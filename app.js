@@ -18,6 +18,7 @@ let draftSlots = new Set();
 let availabilityDirty = false;
 let selectedDay = (new Date().getDay()+6)%7;
 let mancoExpanded = loadMancoExpanded();
+let selectedMatchId = null;
 
 const inviteView = $("#invite-view");
 const lobbyView = $("#lobby-view");
@@ -137,6 +138,7 @@ function syncTabRoute(){
 function renderMancoCollapse(){const toggle=$("#manco-toggle"),content=$("#manco-content"),card=$("#manco-card");toggle.setAttribute("aria-expanded",String(mancoExpanded));content.classList.toggle("hidden",!mancoExpanded);card.classList.toggle("is-collapsed",!mancoExpanded);}
 $("#app-tabs").addEventListener("click",event=>{const button=event.target.closest("[data-tab]");if(!button)return;const hash=`#/${button.dataset.route}`;if(location.hash===hash)syncTabRoute();else location.hash=hash;});
 $("#manco-toggle").addEventListener("click",()=>{mancoExpanded=!mancoExpanded;localStorage.setItem(mancoExpandedKey,String(mancoExpanded));renderMancoCollapse();});
+$("#shared-games").addEventListener("click",event=>{const button=event.target.closest("[data-match-id]");if(!button)return;selectedMatchId=button.dataset.matchId;renderSharedGames();});
 window.addEventListener("hashchange",syncTabRoute);
 $("#day-tabs").addEventListener("click",event=>{const button=event.target.closest("[data-day]");if(!button)return;selectedDay=Number(button.dataset.day);render();});
 $("#time-slots").addEventListener("click",event=>{const slot=event.target.closest(".slot");if(!slot)return;if(!availabilityDirty)draftSlots=new Set(currentPlayer()?.slots||[]);draftSlots.has(slot.dataset.time)?draftSlots.delete(slot.dataset.time):draftSlots.add(slot.dataset.time);availabilityDirty=true;renderTimeGrid();});
@@ -151,10 +153,8 @@ function renderPlayer(player,index){
   const days=dayNames.filter((_,day)=>slotsForDay(day).some(slot=>player.slots.includes(slot.id)));
   const rank=(player.rankTier||"unranked").toLowerCase();
   const rankEmblem=player.rankTier?`<span class="rank-emblem" title="${escapeHtml(player.rankTier)}" aria-label="Rango ${escapeHtml(player.rankTier)}"><svg viewBox="0 0 32 36" aria-hidden="true"><path class="emblem-wings" d="M3 8.5 10.5 12 16 4l5.5 8L29 8.5l-3 15L16 32 6 23.5z"/><path class="emblem-core" d="m16 9 5 7-2 9-3 3-3-3-2-9z"/><path class="emblem-cut" d="m7 14 5 3m13-3-5 3"/></svg></span>`:"";
-  const recent=Array.isArray(player.recentGames)?player.recentGames.slice(0,5):[];
-  const games=Array.from({length:5},(_,game)=>`<i class="game-result ${recent[game]===true?"win":recent[game]===false?"loss":"pending"}"></i>`).join("");
   const icon=player.profileIconUrl?`<img src="${escapeHtml(player.profileIconUrl)}" alt="" />`:`<span>${escapeHtml(player.name[0].toUpperCase())}</span>`;
-  return `<div class="player player-card rank-${rank}"><span class="player-color" style="--player-color:${colors[index%colors.length]}"></span><div class="profile-icon">${icon}</div><div class="player-details"><div class="player-name-line"><strong>${escapeHtml(player.name)}</strong>${rankEmblem}</div><div class="recent-games has-tooltip" tabindex="0" data-tooltip="Últimas cinco partidas: verde = victoria, rojo = derrota" aria-label="Últimas cinco partidas: verde significa victoria y rojo derrota">${games}</div><small>${days.length?days.join(" · "):"Todavía sin horarios"}</small></div></div>`;
+  return `<div class="player player-card rank-${rank}"><span class="player-color" style="--player-color:${colors[index%colors.length]}"></span><div class="profile-icon">${icon}</div><div class="player-details"><div class="player-name-line"><strong>${escapeHtml(player.name)}</strong>${rankEmblem}</div><small>${days.length?days.join(" · "):"Todavía sin horarios"}</small></div></div>`;
 }
 function renderDayTabs(){$("#day-tabs").innerHTML=dayNames.map((name,index)=>{const date=dayDate(index);return `<button type="button" data-day="${index}" class="day-tab ${selectedDay===index?"active":""}"><span>${name.slice(0,3)}</span><strong>${date.day}</strong></button>`;}).join("");$("#selected-day-label").textContent=dayNames[selectedDay];}
 function renderTimeGrid(){const selected=availabilityDirty?draftSlots:new Set(currentPlayer()?.slots||[]);$("#time-slots").innerHTML=slotsForDay(selectedDay).map(slot=>{const count=state.players.filter(player=>player.slots.includes(slot.id)).length;return `<button class="slot ${selected.has(slot.id)?"selected":""}" type="button" data-time="${slot.id}"><strong>${slot.label}</strong><small>${count} disponible${count===1?"":"s"}</small></button>`;}).join("");}
@@ -192,10 +192,25 @@ function renderWeekCalendar(players){
   }).join("");
 }
 function renderMancoRanking(players){
-  const ranked=players.map(player=>{const games=Array.isArray(player.recentGames)?player.recentGames.filter(result=>typeof result==="boolean").slice(0,5):[];return {player,losses:games.filter(result=>!result).length,wins:games.filter(Boolean).length,total:games.length};}).filter(item=>item.total).sort((a,b)=>b.losses-a.losses||a.wins-b.wins||a.player.name.localeCompare(b.player.name));
-  $("#manco-ranking").innerHTML=ranked.length?ranked.map((item,index)=>{const avatar=item.player.profileIconUrl?`<img src="${escapeHtml(item.player.profileIconUrl)}" alt="" />`:`<span>${escapeHtml(item.player.name[0].toUpperCase())}</span>`;return `<div class="manco-row ${index===0?"is-manco":""}"><strong>${index+1}</strong><div class="manco-avatar">${avatar}</div><span>${escapeHtml(item.player.name)}</span><small>${item.losses} derrota${item.losses===1?"":"s"}</small></div>`;}).join(""):`<div class="empty">Todavía no hay partidas para coronar a ningún manco.</div>`;
+  const byName=new Map(players.map(player=>[player.name.toLocaleLowerCase(),player]));
+  const results=new Map();
+  (state.sharedGames||[]).filter(game=>amsterdamDateKey(game.game_start)>=weekStart()).forEach(game=>{
+    (game.teams||[]).flatMap(team=>team.players||[]).filter(player=>player.isOurBoy).forEach(participant=>{
+      const key=String(participant.riotId||"").toLocaleLowerCase();
+      if(!key)return;
+      const item=results.get(key)||{player:byName.get(key)||{name:participant.riotId},losses:0,wins:0,total:0};
+      participant.win?item.wins++:item.losses++;
+      item.total++;
+      results.set(key,item);
+    });
+  });
+  const ranked=[...results.values()].sort((a,b)=>b.losses-a.losses||a.wins-b.wins||a.player.name.localeCompare(b.player.name));
+  $("#manco-ranking").innerHTML=ranked.length?ranked.map((item,index)=>{const avatar=item.player.profileIconUrl?`<img src="${escapeHtml(item.player.profileIconUrl)}" alt="" />`:`<span>${escapeHtml(item.player.name[0].toUpperCase())}</span>`;return `<div class="manco-row ${index===0?"is-manco":""}"><strong>${index+1}</strong><div class="manco-avatar">${avatar}</div><span>${escapeHtml(item.player.name)}</span><small>${item.losses} derrota${item.losses===1?"":"s"} · ${item.total} partida${item.total===1?"":"s"}</small></div>`;}).join(""):`<div class="empty">Todavía no hay partidas compartidas esta semana.</div>`;
 }
+function amsterdamDateKey(value){const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/Amsterdam",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date(value));const date=Object.fromEntries(parts.map(part=>[part.type,part.value]));return `${date.year}-${date.month}-${date.day}`;}
 function compactRiotId(value){return String(value||"Desconocido").split("#")[0];}
+function ourPlayers(game){return (game.teams||[]).flatMap(team=>team.players||[]).filter(player=>player.isOurBoy);}
+function sharedGameWon(game){return ourPlayers(game).some(player=>player.win);}
 function gameMessage(game){
   const ours=(game.teams||[]).flatMap(team=>team.players||[]).filter(player=>player.isOurBoy);
   const won=ours.some(player=>player.win);
@@ -215,15 +230,17 @@ function renderMatchPlayer(player){
 function matchQueueLabel(queueId){return ({400:"Draft",420:"Solo/Duo",440:"Flex"})[Number(queueId)]||null;}
 function renderSharedGames(){
   const games=Array.isArray(state.sharedGames)?state.sharedGames:[];
-  $("#shared-games").innerHTML=games.length?games.map(game=>{
-    const teams=game.teams||[];
-    const ours=teams.flatMap(team=>team.players||[]).filter(player=>player.isOurBoy);
-    const won=ours.some(player=>player.win);
-    const played=new Intl.DateTimeFormat("es-AR",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}).format(new Date(game.game_start));
-    const duration=Math.max(1,Math.round((game.duration_seconds||0)/60));
-    const queueLabel=matchQueueLabel(game.queue_id);
-    return `<article class="shared-game ${won?"win":"loss"}"><header><div><span class="game-outcome">${won?"VICTORIA":"DERROTA"}</span><h3>${escapeHtml(gameMessage(game))}</h3></div><small>${queueLabel?`<span class="game-queue">${queueLabel}</span>`:""}<span>${played} · ${duration} min</span></small></header><div class="match-teams">${teams.map(team=>`<section class="match-team ${team.win?"winning-team":""}"><div class="team-label"><span>${team.win?"Victoria":"Derrota"}</span><b>${team.kills||0} kills</b></div>${(team.players||[]).map(renderMatchPlayer).join("")}</section>`).join("")}</div></article>`;
-  }).join(""):`<div class="empty">Todavía no encontramos partidas compartidas.</div>`;
+  if(!games.length){selectedMatchId=null;$("#shared-games").innerHTML=`<div class="empty">Todavía no encontramos partidas compartidas.</div>`;return;}
+  if(!games.some(game=>game.match_id===selectedMatchId))selectedMatchId=games[0].match_id;
+  const selected=games.find(game=>game.match_id===selectedMatchId)||games[0];
+  const summaries=games.map(game=>{const won=sharedGameWon(game);const played=new Intl.DateTimeFormat("es-AR",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}).format(new Date(game.game_start));const names=ourPlayers(game).map(player=>compactRiotId(player.riotId)).join(" · ");return `<button type="button" class="match-summary ${won?"win":"loss"} ${game.match_id===selected.match_id?"active":""}" data-match-id="${escapeHtml(game.match_id)}" aria-pressed="${game.match_id===selected.match_id}"><span>${won?"VICTORIA":"DERROTA"}</span><time>${played}</time><small>${escapeHtml(names)}</small></button>`;}).join("");
+  const teams=selected.teams||[];
+  const won=sharedGameWon(selected);
+  const played=new Intl.DateTimeFormat("es-AR",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}).format(new Date(selected.game_start));
+  const duration=Math.max(1,Math.round((selected.duration_seconds||0)/60));
+  const queueLabel=matchQueueLabel(selected.queue_id);
+  const detail=`<article class="shared-game ${won?"win":"loss"}"><header><div><span class="game-outcome">${won?"VICTORIA":"DERROTA"}</span><h3>${escapeHtml(gameMessage(selected))}</h3></div><small>${queueLabel?`<span class="game-queue">${queueLabel}</span>`:""}<span>${played} · ${duration} min</span></small></header><div class="match-teams">${teams.map(team=>`<section class="match-team ${team.win?"winning-team":""}"><div class="team-label"><span>${team.win?"Victoria":"Derrota"}</span><b>${team.kills||0} kills</b></div>${(team.players||[]).map(renderMatchPlayer).join("")}</section>`).join("")}</div></article>`;
+  $("#shared-games").innerHTML=`<aside class="match-history" aria-label="Partidas del último mes">${summaries}</aside><div class="match-detail" aria-live="polite">${detail}</div>`;
 }
 async function loadClashSchedule(){
   if(!currentInviteCode)return;

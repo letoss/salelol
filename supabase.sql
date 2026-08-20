@@ -47,6 +47,26 @@ create table if not exists public.shared_matches (
   refreshed_at timestamptz not null default now()
 );
 
+create index if not exists shared_matches_game_start_idx
+on public.shared_matches (game_start desc);
+
+create or replace function public.delete_expired_shared_matches()
+returns void language sql security definer set search_path=public as $$
+  delete from public.shared_matches where game_start < now()-interval '30 days';
+$$;
+revoke all on function public.delete_expired_shared_matches() from public, anon, authenticated;
+grant execute on function public.delete_expired_shared_matches() to service_role;
+
+create or replace function public.prune_shared_matches_after_write()
+returns trigger language plpgsql security definer set search_path=public as $$
+begin
+  perform public.delete_expired_shared_matches();
+  return null;
+end $$;
+drop trigger if exists prune_shared_matches_after_write on public.shared_matches;
+create trigger prune_shared_matches_after_write after insert or update on public.shared_matches
+for each statement execute function public.prune_shared_matches_after_write();
+
 alter table public.players enable row level security;
 alter table public.matches enable row level security;
 alter table public.api_rate_limits enable row level security;

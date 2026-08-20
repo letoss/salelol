@@ -9,6 +9,7 @@ async function validInvitation(code:unknown){const expected=Deno.env.get("LOBBY_
 function currentWeekStart(){const parts=new Intl.DateTimeFormat("en-GB",{timeZone:"Europe/Amsterdam",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date());const value=Object.fromEntries(parts.map(part=>[part.type,part.value]));const date=new Date(Date.UTC(+value.year,+value.month-1,+value.day));const reset=date.getUTCDay()===0&&+value.hour===23&&+value.minute>=59;const daysSinceMonday=(date.getUTCDay()+6)%7;date.setUTCDate(date.getUTCDate()+(reset?1:-daysSinceMonday));return date.toISOString().slice(0,10);}
 const tiers = ["IRON", "BRONZE", "SILVER", "GOLD", "PLATINUM", "EMERALD", "DIAMOND", "MASTER", "GRANDMASTER", "CHALLENGER"];
 const divisions: Record<string, number> = { IV: 1, III: 2, II: 3, I: 4 };
+const MATCH_RETENTION_DAYS = 30;
 
 class RiotError extends Error {
   constructor(
@@ -38,7 +39,7 @@ Deno.serve(async (request) => {
 
   let keyFormatValid = false;
   try {
-    const { gameName, tagLine, invitationCode, cascade = true } = await request.json();
+    const { gameName, tagLine, invitationCode, cascade = true, history = true } = await request.json();
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const canForce = request.headers.get("authorization") === `Bearer ${serviceRoleKey}`;
     if (!canForce) {
@@ -76,8 +77,15 @@ Deno.serve(async (request) => {
     const versions = await (await fetch("https://ddragon.leagueoflegends.com/api/versions.json")).json();
     const dataDragonVersion = versions[0];
     const canonicalId = `${account.gameName}#${account.tagLine}`;
-    const matchIds = await riot("match-list", `https://europe.api.riotgames.com/lol/match/v5/matches/by-puuid/${encodeURIComponent(account.puuid)}/ids?start=0&count=10`);
-    const matches = await Promise.allSettled(matchIds.map((id: string) => riot("match-detail", `https://europe.api.riotgames.com/lol/match/v5/matches/${encodeURIComponent(id)}`)));
+    const retentionCutoff = new Date(Date.now() - MATCH_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+    const historyQuery = history === false ? "start=0&count=10" : `startTime=${Math.floor(retentionCutoff.getTime()/1000)}&start=0&count=95`;
+    const matchIds = await riot("match-list", `https://europe.api.riotgames.com/lol/match/v5/matches/by-puuid/${encodeURIComponent(account.puuid)}/ids?${historyQuery}`);
+    const matches: PromiseSettledResult<Record<string, any>>[] = [];
+    for (let offset = 0; offset < matchIds.length; offset += 10) {
+      const batch = await Promise.allSettled(matchIds.slice(offset, offset + 10).map((id: string) => riot("match-detail", `https://europe.api.riotgames.com/lol/match/v5/matches/${encodeURIComponent(id)}`)));
+      matches.push(...batch);
+      if (offset + 10 < matchIds.length) await new Promise((resolve) => setTimeout(resolve, 550));
+    }
     const recentMatchSummaries = matches.flatMap((result) => {
       if (result.status !== "fulfilled") return [];
       const info = result.value.info;
@@ -101,7 +109,7 @@ Deno.serve(async (request) => {
         teamKills: killsForTeam(teamId),
         opponentKills: opponent ? killsForTeam(Number(opponent.teamId)) : 0,
       }];
-    }).filter((match) => match.matchId);
+    }).filter((match) => match.matchId).slice(0, 10);
     const recentGames = recentMatchSummaries.map((match) => match.win);
 
     const row = {
@@ -143,7 +151,7 @@ Deno.serve(async (request) => {
             const response = await fetch(`${projectUrl}/functions/v1/riot-profile`, {
               method: "POST",
               headers: { Authorization: `Bearer ${serviceRoleKey}`, apikey: serviceRoleKey, "Content-Type": "application/json" },
-              body: JSON.stringify({ gameName: riotId.slice(0, separator), tagLine: riotId.slice(separator + 1), cascade: false }),
+              body: JSON.stringify({ gameName: riotId.slice(0, separator), tagLine: riotId.slice(separator + 1), cascade: false, history: false }),
             });
             if (!response.ok) console.error("Teammate refresh failed", riotId, response.status, await response.text());
           }));
@@ -191,10 +199,9 @@ Deno.serve(async (request) => {
     if (sharedMatches.length) {
       const { error:matchesError } = await supabase.from("shared_matches").upsert(sharedMatches, { onConflict:"match_id" });
       if (matchesError) console.error("Shared match cache write failed", matchesError);
-      const { data:allShared } = await supabase.from("shared_matches").select("match_id").order("game_start", { ascending:false }).range(10, 99);
-      const staleIds = (allShared || []).map((match) => match.match_id);
-      if (staleIds.length) await supabase.from("shared_matches").delete().in("match_id", staleIds);
     }
+    const { error:cleanupError } = await supabase.from("shared_matches").delete().lt("game_start", retentionCutoff.toISOString());
+    if (cleanupError) console.error("Shared match retention cleanup failed", cleanupError);
     return json(publicProfile(row));
   } catch (error) {
     console.error(error);

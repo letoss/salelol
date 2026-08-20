@@ -11,6 +11,9 @@ create table if not exists public.shared_matches (
   refreshed_at timestamptz not null default now()
 );
 
+create index if not exists shared_matches_game_start_idx
+on public.shared_matches (game_start desc);
+
 alter table public.shared_matches enable row level security;
 drop policy if exists "Anyone can view shared matches" on public.shared_matches;
 create policy "Anyone can view shared matches"
