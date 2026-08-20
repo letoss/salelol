@@ -211,6 +211,7 @@ function renderMatchPlayer(player){
   const icon=player.championIconUrl?`<img src="${escapeHtml(player.championIconUrl)}" alt="${escapeHtml(player.championName||"")}" loading="lazy" />`:`<span>${escapeHtml((player.championName||"?")[0])}</span>`;
   return `<div class="match-player ${player.isOurBoy?"our-boy":""}"><div class="champion-icon">${icon}</div><div class="match-player-copy"><strong>${escapeHtml(compactRiotId(player.riotId))}</strong><small>${escapeHtml(player.championName||"Campeón")}</small></div><b>${Number(player.kills)||0}/${Number(player.deaths)||0}/${Number(player.assists)||0}</b></div>`;
 }
+function matchQueueLabel(queueId){return ({400:"Normal Draft",420:"Ranked Solo/Duo",440:"Ranked Flex"})[Number(queueId)]||null;}
 function renderSharedGames(){
   const games=Array.isArray(state.sharedGames)?state.sharedGames:[];
   $("#shared-games").innerHTML=games.length?games.map(game=>{
@@ -219,7 +220,8 @@ function renderSharedGames(){
     const won=ours.some(player=>player.win);
     const played=new Intl.DateTimeFormat("es-AR",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}).format(new Date(game.game_start));
     const duration=Math.max(1,Math.round((game.duration_seconds||0)/60));
-    return `<article class="shared-game ${won?"win":"loss"}"><header><div><span class="game-outcome">${won?"VICTORIA":"DERROTA"}</span><h3>${escapeHtml(gameMessage(game))}</h3></div><small>${played} · ${duration} min · ${ours.length} de los nuestros</small></header><div class="match-teams">${teams.map(team=>`<section class="match-team ${team.win?"winning-team":""}"><div class="team-label"><span>${team.win?"Victoria":"Derrota"}</span><b>${team.kills||0} kills</b></div>${(team.players||[]).map(renderMatchPlayer).join("")}</section>`).join("")}</div></article>`;
+    const queueLabel=matchQueueLabel(game.queue_id);
+    return `<article class="shared-game ${won?"win":"loss"}"><header><div><span class="game-outcome">${won?"VICTORIA":"DERROTA"}</span><h3>${escapeHtml(gameMessage(game))}</h3></div><small>${queueLabel?`<span class="game-queue">${queueLabel}</span>`:""}<span>${played} · ${duration} min · ${ours.length} de los nuestros</span></small></header><div class="match-teams">${teams.map(team=>`<section class="match-team ${team.win?"winning-team":""}"><div class="team-label"><span>${team.win?"Victoria":"Derrota"}</span><b>${team.kills||0} kills</b></div>${(team.players||[]).map(renderMatchPlayer).join("")}</section>`).join("")}</div></article>`;
   }).join(""):`<div class="empty">Todavía no encontramos partidas compartidas.</div>`;
 }
 async function loadClashSchedule(){
