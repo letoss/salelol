@@ -175,7 +175,10 @@ function compactRiotId(value){return String(value||"Desconocido").split("#")[0];
 function gameMessage(game){
   const ours=(game.teams||[]).flatMap(team=>team.players||[]).filter(player=>player.isOurBoy);
   const won=ours.some(player=>player.win);
-  if(!won)return "Nos mandaron al lobby";
+  if(!won){
+    const worst=[...ours].sort((a,b)=>((a.kills+a.assists)/Math.max(1,a.deaths))-((b.kills+b.assists)/Math.max(1,b.deaths))||b.deaths-a.deaths)[0];
+    return `Report ${compactRiotId(worst?.riotId)}`;
+  }
   const best=[...ours].sort((a,b)=>((b.kills+b.assists)/Math.max(1,b.deaths))-((a.kills+a.assists)/Math.max(1,a.deaths)))[0];
   const options=["Siempre confié en este team","Aaahhhh IZI",`Carriados por ${compactRiotId(best?.riotId)}`];
   const seed=[...String(game.match_id||"")].reduce((sum,char)=>sum+char.charCodeAt(0),0);
