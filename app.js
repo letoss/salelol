@@ -19,6 +19,7 @@ let availabilityDirty = false;
 let selectedDay = (new Date().getDay()+6)%7;
 let mancoExpanded = loadMancoExpanded();
 let selectedMatchId = null;
+let renderedMatchSignature = "";
 
 const inviteView = $("#invite-view");
 const lobbyView = $("#lobby-view");
@@ -103,7 +104,7 @@ yesButton.addEventListener("click", async () => {
   saveLoginCookie(submittedGameName,submittedTag,currentInviteCode);
   sessionStorage.setItem("salelol-name",currentName);
   if(!currentPlayer()) state.players.push({name:currentName,slots:[],joinedAt:Date.now()});
-  persist();inviteView.classList.add("hidden");lobbyView.classList.remove("hidden");render();
+  persist();inviteView.classList.add("hidden");lobbyView.classList.remove("hidden");syncTabRoute();render();
   const profileResult=await Promise.resolve(remoteStore.fetchRiotProfile(submittedGameName,submittedTag,currentInviteCode)).then(value=>({status:"fulfilled",value}),reason=>({status:"rejected",reason}));
   if(profileResult.status==="fulfilled"){
     applyProfile(currentPlayer(),profileResult.value);
@@ -133,6 +134,7 @@ function syncTabRoute(){
   const button=tabs.find(tab=>tab.dataset.route===route)||tabs.find(tab=>tab.dataset.route===defaultTabRoute);
   document.querySelectorAll(".app-tab").forEach(tab=>{const active=tab===button;tab.classList.toggle("active",active);tab.setAttribute("aria-selected",String(active));tab.tabIndex=active?0:-1;});
   document.querySelectorAll(".tab-panel").forEach(panel=>panel.classList.toggle("hidden",panel.id!==button.dataset.tab));
+  document.body.classList.toggle("games-tab-active",button.dataset.tab==="games-tab"&&!lobbyView.classList.contains("hidden"));
   if(!requestedRoute||route!==button.dataset.route)history.replaceState(null,"",`${location.pathname}${location.search}#/${button.dataset.route}`);
 }
 function renderMancoCollapse(){const toggle=$("#manco-toggle"),content=$("#manco-content"),card=$("#manco-card");toggle.setAttribute("aria-expanded",String(mancoExpanded));content.classList.toggle("hidden",!mancoExpanded);card.classList.toggle("is-collapsed",!mancoExpanded);}
@@ -230,8 +232,13 @@ function renderMatchPlayer(player){
 function matchQueueLabel(queueId){return ({400:"Draft",420:"Solo/Duo",440:"Flex"})[Number(queueId)]||null;}
 function renderSharedGames(){
   const games=Array.isArray(state.sharedGames)?state.sharedGames:[];
-  if(!games.length){selectedMatchId=null;$("#shared-games").innerHTML=`<div class="empty">Todavía no encontramos partidas compartidas.</div>`;return;}
+  const container=$("#shared-games");
+  const previousHistory=container.querySelector(".match-history");
+  const previousScroll={top:previousHistory?.scrollTop||0,left:previousHistory?.scrollLeft||0};
+  if(!games.length){selectedMatchId=null;if(renderedMatchSignature!=="empty"){container.innerHTML=`<div class="empty">Todavía no encontramos partidas compartidas.</div>`;renderedMatchSignature="empty";}return;}
   if(!games.some(game=>game.match_id===selectedMatchId))selectedMatchId=games[0].match_id;
+  const signature=`${selectedMatchId}:${JSON.stringify(games)}`;
+  if(signature===renderedMatchSignature)return;
   const selected=games.find(game=>game.match_id===selectedMatchId)||games[0];
   const summaries=games.map(game=>{const won=sharedGameWon(game);const played=new Intl.DateTimeFormat("es-AR",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}).format(new Date(game.game_start));const names=ourPlayers(game).map(player=>compactRiotId(player.riotId)).join(" · ");return `<button type="button" class="match-summary ${won?"win":"loss"} ${game.match_id===selected.match_id?"active":""}" data-match-id="${escapeHtml(game.match_id)}" aria-pressed="${game.match_id===selected.match_id}"><span>${won?"VICTORIA":"DERROTA"}</span><time>${played}</time><small>${escapeHtml(names)}</small></button>`;}).join("");
   const teams=selected.teams||[];
@@ -240,7 +247,11 @@ function renderSharedGames(){
   const duration=Math.max(1,Math.round((selected.duration_seconds||0)/60));
   const queueLabel=matchQueueLabel(selected.queue_id);
   const detail=`<article class="shared-game ${won?"win":"loss"}"><header><div><span class="game-outcome">${won?"VICTORIA":"DERROTA"}</span><h3>${escapeHtml(gameMessage(selected))}</h3></div><small>${queueLabel?`<span class="game-queue">${queueLabel}</span>`:""}<span>${played} · ${duration} min</span></small></header><div class="match-teams">${teams.map(team=>`<section class="match-team ${team.win?"winning-team":""}"><div class="team-label"><span>${team.win?"Victoria":"Derrota"}</span><b>${team.kills||0} kills</b></div>${(team.players||[]).map(renderMatchPlayer).join("")}</section>`).join("")}</div></article>`;
-  $("#shared-games").innerHTML=`<aside class="match-history" aria-label="Partidas del último mes">${summaries}</aside><div class="match-detail" aria-live="polite">${detail}</div>`;
+  container.innerHTML=`<aside class="match-history" aria-label="Partidas del último mes">${summaries}</aside><div class="match-detail" aria-live="polite">${detail}</div>`;
+  renderedMatchSignature=signature;
+  const nextHistory=container.querySelector(".match-history");
+  nextHistory.scrollTop=previousScroll.top;
+  nextHistory.scrollLeft=previousScroll.left;
 }
 async function loadClashSchedule(){
   if(!currentInviteCode)return;
