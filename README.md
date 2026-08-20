@@ -15,8 +15,6 @@ Abrí `index.html` o serví la carpeta con `python -m http.server 8000`.
 
 La página sincroniza la lobby cada cinco segundos. Sin configuración, usa `localStorage` como respaldo local.
 
-For the lock-in status, run `db_migrations/add-lock-status.sql` once in the Supabase SQL Editor.
-
 The lobby stores a full Monday-to-Sunday schedule and rolls into the next week every Sunday at 23:59 in `Europe/Amsterdam`. Existing installations should run `db_migrations/switch-to-monday-week.sql` once in the Supabase SQL Editor; it keeps the current Monday-Saturday availability, discards the previous Sunday, and leaves the upcoming Sunday empty.
 
 Riot profiles are cached through the `riot-profile` Edge Function. Run `db_migrations/add-riot-profiles.sql`, add `RIOT_API_KEY` as a Supabase secret, and deploy `supabase/functions/riot-profile/index.ts`.
@@ -33,3 +31,4 @@ supabase functions deploy riot-profile
 ```
 
 The browser publishable key remains public and read-only. Each player receives a device-specific ownership token, and up to ten devices can be authorized by rejoining with the shared invitation code. Every Edge Function is self-contained so its `index.ts` can be pasted directly into the Dashboard editor.
+For Recent Games and the removal of the old lock-in state, run `db_migrations/add-shared-matches-remove-locking.sql`, then deploy both `riot-profile` and `clash-schedule`. The Riot profile refresh discovers matches containing at least two registered players, stores full team champion/KDA summaries, and retains the newest ten shared games. Clash notifications use Riot's EUW `clash-v1` schedule and the existing `RIOT_API_KEY` secret.

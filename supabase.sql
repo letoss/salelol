@@ -14,7 +14,6 @@ create table if not exists public.players (
   game_date date not null default public.current_lobby_week(),
   name extensions.citext not null check (char_length(name) between 1 and 24),
   slots text[] not null default '{}',
-  locked_in boolean not null default false,
   joined_at timestamptz not null default now(),
   last_seen timestamptz not null default now(),
   owner_token_hash text,
@@ -38,9 +37,20 @@ create table if not exists public.api_rate_limits (
   primary key (scope, identifier, window_start)
 );
 
+create table if not exists public.shared_matches (
+  match_id text primary key,
+  game_start timestamptz not null,
+  duration_seconds integer not null default 0,
+  queue_id integer,
+  teams jsonb not null default '[]'::jsonb,
+  shared_player_count integer not null check (shared_player_count >= 2),
+  refreshed_at timestamptz not null default now()
+);
+
 alter table public.players enable row level security;
 alter table public.matches enable row level security;
 alter table public.api_rate_limits enable row level security;
+alter table public.shared_matches enable row level security;
 
 create or replace function public.consume_api_rate_limit(rate_scope text, rate_identifier text, rate_limit integer, window_seconds integer)
 returns boolean language plpgsql security definer set search_path=public as $$
@@ -64,11 +74,16 @@ on public.players for select to anon using (game_date = public.current_lobby_wee
 create policy "Anyone can view today's matches"
 on public.matches for select to anon using (game_date = current_date);
 
+create policy "Anyone can view shared matches"
+on public.shared_matches for select to anon using (true);
+
 revoke all on public.players from anon, authenticated;
-grant select(game_date,name,slots,locked_in,joined_at,last_seen) on public.players to anon, authenticated;
+grant select(game_date,name,slots,joined_at,last_seen) on public.players to anon, authenticated;
 revoke all on public.matches from anon, authenticated;
 grant select(id,game_date,match_time,creator,created_at) on public.matches to anon, authenticated;
 revoke all on public.api_rate_limits from anon, authenticated;
+revoke all on public.shared_matches from anon, authenticated;
+grant select(match_id,game_start,duration_seconds,queue_id,teams,shared_player_count) on public.shared_matches to anon, authenticated;
 
 alter publication supabase_realtime add table public.players;
 alter publication supabase_realtime add table public.matches;

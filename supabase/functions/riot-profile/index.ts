@@ -73,7 +73,10 @@ Deno.serve(async (request) => {
     const score = (entry: Record<string, unknown>) => tiers.indexOf(String(entry.tier)) * 10 + (divisions[String(entry.rank)] || 0);
     const highest = ranked.sort((a: Record<string, unknown>, b: Record<string, unknown>) => score(b) - score(a))[0];
 
-    const matchIds = await riot("match-list", `https://europe.api.riotgames.com/lol/match/v5/matches/by-puuid/${encodeURIComponent(account.puuid)}/ids?start=0&count=5`);
+    const versions = await (await fetch("https://ddragon.leagueoflegends.com/api/versions.json")).json();
+    const dataDragonVersion = versions[0];
+    const canonicalId = `${account.gameName}#${account.tagLine}`;
+    const matchIds = await riot("match-list", `https://europe.api.riotgames.com/lol/match/v5/matches/by-puuid/${encodeURIComponent(account.puuid)}/ids?start=0&count=10`);
     const matches = await Promise.allSettled(matchIds.map((id: string) => riot("match-detail", `https://europe.api.riotgames.com/lol/match/v5/matches/${encodeURIComponent(id)}`)));
     const recentMatchSummaries = matches.flatMap((result) => {
       if (result.status !== "fulfilled") return [];
@@ -101,13 +104,11 @@ Deno.serve(async (request) => {
     }).filter((match) => match.matchId);
     const recentGames = recentMatchSummaries.map((match) => match.win);
 
-    const versions = await (await fetch("https://ddragon.leagueoflegends.com/api/versions.json")).json();
-    const canonicalId = `${account.gameName}#${account.tagLine}`;
     const row = {
       riot_id_normalized: normalized,
       riot_id: canonicalId,
       puuid: account.puuid,
-      profile_icon_url: `https://ddragon.leagueoflegends.com/cdn/${versions[0]}/img/profileicon/${summoner.profileIconId}.png`,
+      profile_icon_url: `https://ddragon.leagueoflegends.com/cdn/${dataDragonVersion}/img/profileicon/${summoner.profileIconId}.png`,
       rank_tier: highest?.tier || null,
       rank_display: highest ? `${highest.tier} ${highest.rank}` : null,
       ranked_queue: highest?.queueType || null,
@@ -150,6 +151,50 @@ Deno.serve(async (request) => {
       }
     }
 
+    const { data: registeredProfiles, error: profilesError } = await supabase.from("riot_profiles").select("riot_id,puuid");
+    if (profilesError) console.error("Registered profiles lookup failed", profilesError);
+    const registeredByPuuid = new Map((registeredProfiles || []).map((profile) => [profile.puuid, profile.riot_id]));
+    registeredByPuuid.set(account.puuid, canonicalId);
+    const sharedMatches = matches.flatMap((result) => {
+      if (result.status !== "fulfilled") return [];
+      const match = result.value;
+      const participants = Array.isArray(match.info?.participants) ? match.info.participants : [];
+      const sharedPlayerCount = participants.filter((participant: Record<string, unknown>) => registeredByPuuid.has(String(participant.puuid))).length;
+      if (sharedPlayerCount < 2) return [];
+      const teams = [100, 200].map((teamId) => {
+        const players = participants.filter((participant: Record<string, unknown>) => participant.teamId === teamId).map((participant: Record<string, unknown>) => {
+          const knownRiotId = registeredByPuuid.get(String(participant.puuid));
+          const riotId = knownRiotId || [participant.riotIdGameName, participant.riotIdTagline].filter(Boolean).join("#") || participant.summonerName || "Desconocido";
+          return {
+            riotId,
+            championName: participant.championName,
+            championIconUrl: `https://ddragon.leagueoflegends.com/cdn/${dataDragonVersion}/img/champion/${encodeURIComponent(String(participant.championName))}.png`,
+            kills: participant.kills || 0,
+            deaths: participant.deaths || 0,
+            assists: participant.assists || 0,
+            win: Boolean(participant.win),
+            isOurBoy: Boolean(knownRiotId),
+          };
+        });
+        return { teamId, win:Boolean(players[0]?.win), kills:players.reduce((sum:number, player) => sum + Number(player.kills || 0), 0), players };
+      });
+      return [{
+        match_id: match.metadata?.matchId,
+        game_start: new Date(match.info?.gameStartTimestamp || Date.now()).toISOString(),
+        duration_seconds: match.info?.gameDuration || 0,
+        queue_id: match.info?.queueId || null,
+        teams,
+        shared_player_count: sharedPlayerCount,
+        refreshed_at: new Date().toISOString(),
+      }];
+    });
+    if (sharedMatches.length) {
+      const { error:matchesError } = await supabase.from("shared_matches").upsert(sharedMatches, { onConflict:"match_id" });
+      if (matchesError) console.error("Shared match cache write failed", matchesError);
+      const { data:allShared } = await supabase.from("shared_matches").select("match_id").order("game_start", { ascending:false }).range(10, 99);
+      const staleIds = (allShared || []).map((match) => match.match_id);
+      if (staleIds.length) await supabase.from("shared_matches").delete().in("match_id", staleIds);
+    }
     return json(publicProfile(row));
   } catch (error) {
     console.error(error);

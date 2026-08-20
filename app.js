@@ -44,7 +44,7 @@ function weekStart() {
   date.setUTCDate(date.getUTCDate() + (reset ? 1 : -daysSinceMonday));
   return date.toISOString().slice(0, 10);
 }
-function loadState() { try { const current=weekStart();const saved=JSON.parse(localStorage.getItem(storeKey));if(!saved)return {date:current,players:[]};const legacy=new Date(`${current}T00:00:00Z`);legacy.setUTCDate(legacy.getUTCDate()-1);if(saved.date===legacy.toISOString().slice(0,10)){const validSlots=new Set(dayNames.flatMap((_,day)=>slotsForDay(day).map(slot=>slot.id)));saved.players.forEach(player=>{player.slots=(player.slots||[]).filter(slot=>validSlots.has(slot));});saved.date=current;}return saved; } catch { return { date:weekStart(), players:[] }; } }
+function loadState() { try { const current=weekStart();const saved=JSON.parse(localStorage.getItem(storeKey));if(!saved)return {date:current,players:[],sharedGames:[]};saved.sharedGames||=[];const legacy=new Date(`${current}T00:00:00Z`);legacy.setUTCDate(legacy.getUTCDate()-1);if(saved.date===legacy.toISOString().slice(0,10)){const validSlots=new Set(dayNames.flatMap((_,day)=>slotsForDay(day).map(slot=>slot.id)));saved.players.forEach(player=>{player.slots=(player.slots||[]).filter(slot=>validSlots.has(slot));});saved.date=current;}return saved; } catch { return { date:weekStart(), players:[],sharedGames:[] }; } }
 function loadSavedRiotId() { try { const value=JSON.parse(localStorage.getItem(savedRiotIdKey));return {gameName:value?.gameName||"",tagLine:value?.tagLine||""}; } catch { return {gameName:"",tagLine:""}; } }
 function loadOwnerToken(name) { try { return JSON.parse(localStorage.getItem(ownerTokensKey))?.[name.toLowerCase()]||""; } catch { return ""; } }
 function saveOwnerToken(name,token) { const tokens=JSON.parse(localStorage.getItem(ownerTokensKey)||"{}");tokens[name.toLowerCase()]=token;localStorage.setItem(ownerTokensKey,JSON.stringify(tokens)); }
@@ -89,7 +89,7 @@ yesButton.addEventListener("click", async () => {
   }
   localStorage.setItem(savedRiotIdKey,JSON.stringify({gameName:submittedGameName,tagLine:submittedTag}));
   sessionStorage.setItem("salelol-name",currentName);
-  if(!currentPlayer()) state.players.push({name:currentName,slots:[],lockedIn:false,joinedAt:Date.now()});
+  if(!currentPlayer()) state.players.push({name:currentName,slots:[],joinedAt:Date.now()});
   persist();inviteView.classList.add("hidden");lobbyView.classList.remove("hidden");render();
   const profileResult=await Promise.resolve(remoteStore.fetchRiotProfile(submittedGameName,submittedTag,currentInviteCode)).then(value=>({status:"fulfilled",value}),reason=>({status:"rejected",reason}));
   if(profileResult.status==="fulfilled"){
@@ -100,6 +100,7 @@ yesButton.addEventListener("click", async () => {
     console.error("Riot profile unavailable; lobby access preserved",profileResult.reason);
     await refreshRemote().catch(console.error);
   }
+  loadClashSchedule().catch(console.error);
 });
 function validateRiotId(){
   $("#name-error").textContent="";
@@ -116,14 +117,11 @@ $("#app-tabs").addEventListener("click",event=>{const button=event.target.closes
 $("#day-tabs").addEventListener("click",event=>{const button=event.target.closest("[data-day]");if(!button)return;selectedDay=Number(button.dataset.day);render();});
 $("#time-slots").addEventListener("click",event=>{const slot=event.target.closest(".slot");if(!slot)return;if(!availabilityDirty)draftSlots=new Set(currentPlayer()?.slots||[]);draftSlots.has(slot.dataset.time)?draftSlots.delete(slot.dataset.time):draftSlots.add(slot.dataset.time);availabilityDirty=true;renderTimeGrid();});
 $("#save-availability").addEventListener("click",async()=>{const player=currentPlayer();if(!player)return;if(!availabilityDirty)draftSlots=new Set(player.slots||[]);const previous=player.slots;player.slots=[...draftSlots];persist();render();try{await remoteStore.saveSlots(currentName,player.slots,currentOwnerToken);availabilityDirty=false;await refreshRemote();$("#save-message").textContent="Semana guardada. GG.";}catch(error){player.slots=previous;persist();render();$("#save-message").textContent="No se pudo guardar. Volvé a ingresar al lobby.";}setTimeout(()=>{$("#save-message").textContent="";},2200);});
-$("#lock-button").addEventListener("click",async()=>{const player=currentPlayer();if(!player)return;const previous=player.lockedIn;player.lockedIn=!player.lockedIn;persist();render();try{await remoteStore.setLocked(currentName,player.lockedIn,currentOwnerToken);await refreshRemote();}catch(error){player.lockedIn=previous;persist();render();}});
-
 function render(){
   const players=[...state.players].sort((a,b)=>a.joinedAt-b.joinedAt);
-  $("#player-count").textContent=players.filter(player=>player.lockedIn).length;
+  $("#player-count").textContent=players.length;
   $("#players-list").innerHTML=players.length?players.map((player,index)=>renderPlayer(player,index)).join(""):`<div class="empty">Todavía no entró ningún manco.</div>`;
-  const me=currentPlayer();$("#lock-button").textContent=me?.lockedIn?"DESBLOQUEAR":"LOCK IN";$("#lock-button").classList.toggle("is-locked",Boolean(me?.lockedIn));
-  renderDayTabs();renderTimeGrid();renderTodayMatches();renderWeekCalendar(players);renderSharedGame(players);renderMancoRanking(players);
+  renderDayTabs();renderTimeGrid();renderTodayMatches();renderWeekCalendar(players);renderMancoRanking(players);renderSharedGames();
 }
 function renderPlayer(player,index){
   const days=dayNames.filter((_,day)=>slotsForDay(day).some(slot=>player.slots.includes(slot.id)));
@@ -132,7 +130,7 @@ function renderPlayer(player,index){
   const recent=Array.isArray(player.recentGames)?player.recentGames.slice(0,5):[];
   const games=Array.from({length:5},(_,game)=>`<i class="game-result ${recent[game]===true?"win":recent[game]===false?"loss":"pending"}"></i>`).join("");
   const icon=player.profileIconUrl?`<img src="${escapeHtml(player.profileIconUrl)}" alt="" />`:`<span>${escapeHtml(player.name[0].toUpperCase())}</span>`;
-  return `<div class="player player-card rank-${rank}"><span class="player-color" style="--player-color:${colors[index%colors.length]}"></span><div class="profile-icon">${icon}</div><div class="player-details"><div class="player-name-line"><strong>${escapeHtml(player.name)}</strong>${rankEmblem}</div><div class="recent-games has-tooltip" tabindex="0" data-tooltip="Últimas cinco partidas: verde = victoria, rojo = derrota" aria-label="Últimas cinco partidas: verde significa victoria y rojo derrota">${games}</div><small>${days.length?days.join(" · "):"Todavía sin horarios"}</small></div><div class="lock-status ${player.lockedIn?"is-locked":""}">${player.lockedIn?"✓":"○"}</div></div>`;
+  return `<div class="player player-card rank-${rank}"><span class="player-color" style="--player-color:${colors[index%colors.length]}"></span><div class="profile-icon">${icon}</div><div class="player-details"><div class="player-name-line"><strong>${escapeHtml(player.name)}</strong>${rankEmblem}</div><div class="recent-games has-tooltip" tabindex="0" data-tooltip="Últimas cinco partidas: verde = victoria, rojo = derrota" aria-label="Últimas cinco partidas: verde significa victoria y rojo derrota">${games}</div><small>${days.length?days.join(" · "):"Todavía sin horarios"}</small></div></div>`;
 }
 function renderDayTabs(){$("#day-tabs").innerHTML=dayNames.map((name,index)=>{const date=dayDate(index);return `<button type="button" data-day="${index}" class="day-tab ${selectedDay===index?"active":""}"><span>${name.slice(0,3)}</span><strong>${date.day}</strong></button>`;}).join("");$("#selected-day-label").textContent=dayNames[selectedDay];}
 function renderTimeGrid(){const selected=availabilityDirty?draftSlots:new Set(currentPlayer()?.slots||[]);$("#time-slots").innerHTML=slotsForDay(selectedDay).map(slot=>{const count=state.players.filter(player=>player.slots.includes(slot.id)).length;return `<button class="slot ${selected.has(slot.id)?"selected":""}" type="button" data-time="${slot.id}"><strong>${slot.label}</strong><small>${count} disponible${count===1?"":"s"}</small></button>`;}).join("");}
@@ -169,39 +167,44 @@ function renderWeekCalendar(players){
     return `<article class="week-day"><header><div><strong>${name}</strong><small>${dayDate(day).day}</small></div><span>${active.length} disponible${active.length===1?"":"s"}</span></header><div class="day-timeline"><div class="timeline-axis"><b>INVOCADOR</b><div>${axis}</div></div><div class="availability-lanes">${lanes||`<p>Sin horarios cargados.</p>`}</div></div></article>`;
   }).join("");
 }
-function latestSharedGame(players){
-  const groups=new Map();
-  players.forEach(player=>(player.recentMatchSummaries||[]).forEach(match=>{
-    if(!match?.matchId||!match?.teamId)return;
-    const key=`${match.matchId}:${match.teamId}`;
-    if(!groups.has(key))groups.set(key,{matchId:match.matchId,teamId:match.teamId,gameCreation:Number(match.gameCreation)||0,participants:[]});
-    groups.get(key).participants.push({player,match});
-  }));
-  return [...groups.values()].filter(game=>game.participants.length>=2).sort((a,b)=>b.gameCreation-a.gameCreation)[0]||null;
-}
-function kdaScore(match){return (Number(match.kills)+Number(match.assists))/Math.max(1,Number(match.deaths));}
-function stableMatchChoice(matchId,count){let hash=0;for(const character of String(matchId))hash=((hash<<5)-hash+character.charCodeAt(0))|0;return Math.abs(hash)%count;}
-function renderSharedGame(players){
-  const card=$("#shared-game-card"),banner=$("#shared-game-banner");
-  const game=latestSharedGame(players);
-  if(!game){card.classList.add("hidden");banner.innerHTML="";return;}
-  const won=game.participants.every(item=>item.match.win===true);
-  const worst=[...game.participants].sort((a,b)=>kdaScore(a.match)-kdaScore(b.match)||Number(b.match.deaths)-Number(a.match.deaths)||Number(a.match.kills)-Number(b.match.kills))[0];
-  const best=[...game.participants].sort((a,b)=>kdaScore(b.match)-kdaScore(a.match)||Number(b.match.kills)-Number(a.match.kills)||Number(a.match.deaths)-Number(b.match.deaths))[0];
-  const winHeadlines=["Siempre confie en este team","Aaahhhh IZI",`Carriados por ${best.player.name.split("#")[0]}`];
-  const headline=won?winHeadlines[stableMatchChoice(game.matchId,winHeadlines.length)]:`Report ${worst.player.name.split("#")[0]}`;
-  const score=`${Number(game.participants[0].match.teamKills)||0} – ${Number(game.participants[0].match.opponentKills)||0}`;
-  const rows=game.participants.map(({player,match})=>{
-    const avatar=player.profileIconUrl?`<img src="${escapeHtml(player.profileIconUrl)}" alt="" />`:`<span>${escapeHtml(player.name[0].toUpperCase())}</span>`;
-    return `<div class="shared-player"><div class="shared-avatar">${avatar}</div><div><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(match.championName||"Invocador")}</small></div><b>${Number(match.kills)||0} / ${Number(match.deaths)||0} / ${Number(match.assists)||0}</b></div>`;
-  }).join("");
-  banner.className=`shared-game-banner ${won?"is-win":"is-loss"}`;
-  banner.innerHTML=`<div class="shared-game-copy"><span>ÚLTIMA PARTIDA JUNTOS</span><h2>${escapeHtml(headline)}</h2><p><strong>${score}</strong> · ${game.participants.length} mancos registrados</p></div><div class="shared-players">${rows}</div>`;
-  card.classList.remove("hidden");
-}
 function renderMancoRanking(players){
-  const ranked=players.map(player=>{const games=Array.isArray(player.recentGames)?player.recentGames.filter(result=>typeof result==="boolean"):[];return {player,losses:games.filter(result=>!result).length,wins:games.filter(Boolean).length,total:games.length};}).filter(item=>item.total).sort((a,b)=>b.losses-a.losses||a.wins-b.wins||a.player.name.localeCompare(b.player.name));
+  const ranked=players.map(player=>{const games=Array.isArray(player.recentGames)?player.recentGames.filter(result=>typeof result==="boolean").slice(0,5):[];return {player,losses:games.filter(result=>!result).length,wins:games.filter(Boolean).length,total:games.length};}).filter(item=>item.total).sort((a,b)=>b.losses-a.losses||a.wins-b.wins||a.player.name.localeCompare(b.player.name));
   $("#manco-ranking").innerHTML=ranked.length?ranked.map((item,index)=>{const avatar=item.player.profileIconUrl?`<img src="${escapeHtml(item.player.profileIconUrl)}" alt="" />`:`<span>${escapeHtml(item.player.name[0].toUpperCase())}</span>`;return `<div class="manco-row ${index===0?"is-manco":""}"><strong>${index+1}</strong><div class="manco-avatar">${avatar}</div><span>${escapeHtml(item.player.name)}</span><small>${item.losses} derrota${item.losses===1?"":"s"}</small></div>`;}).join(""):`<div class="empty">Todavía no hay partidas para coronar a ningún manco.</div>`;
+}
+function compactRiotId(value){return String(value||"Desconocido").split("#")[0];}
+function gameMessage(game){
+  const ours=(game.teams||[]).flatMap(team=>team.players||[]).filter(player=>player.isOurBoy);
+  const won=ours.some(player=>player.win);
+  if(!won)return "Nos mandaron al lobby";
+  const best=[...ours].sort((a,b)=>((b.kills+b.assists)/Math.max(1,b.deaths))-((a.kills+a.assists)/Math.max(1,a.deaths)))[0];
+  const options=["Siempre confié en este team","Aaahhhh IZI",`Carriados por ${compactRiotId(best?.riotId)}`];
+  const seed=[...String(game.match_id||"")].reduce((sum,char)=>sum+char.charCodeAt(0),0);
+  return options[seed%options.length];
+}
+function renderMatchPlayer(player){
+  const icon=player.championIconUrl?`<img src="${escapeHtml(player.championIconUrl)}" alt="${escapeHtml(player.championName||"")}" loading="lazy" />`:`<span>${escapeHtml((player.championName||"?")[0])}</span>`;
+  return `<div class="match-player ${player.isOurBoy?"our-boy":""}"><div class="champion-icon">${icon}</div><div class="match-player-copy"><strong>${escapeHtml(compactRiotId(player.riotId))}</strong><small>${escapeHtml(player.championName||"Campeón")}</small></div><b>${Number(player.kills)||0}/${Number(player.deaths)||0}/${Number(player.assists)||0}</b></div>`;
+}
+function renderSharedGames(){
+  const games=Array.isArray(state.sharedGames)?state.sharedGames:[];
+  $("#shared-games").innerHTML=games.length?games.map(game=>{
+    const teams=game.teams||[];
+    const ours=teams.flatMap(team=>team.players||[]).filter(player=>player.isOurBoy);
+    const won=ours.some(player=>player.win);
+    const played=new Intl.DateTimeFormat("es-AR",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}).format(new Date(game.game_start));
+    const duration=Math.max(1,Math.round((game.duration_seconds||0)/60));
+    return `<article class="shared-game ${won?"win":"loss"}"><header><div><span class="game-outcome">${won?"VICTORIA":"DERROTA"}</span><h3>${escapeHtml(gameMessage(game))}</h3></div><small>${played} · ${duration} min · ${ours.length} de los nuestros</small></header><div class="match-teams">${teams.map(team=>`<section class="match-team ${team.win?"winning-team":""}"><div class="team-label"><span>${team.win?"Victoria":"Derrota"}</span><b>${team.kills||0} kills</b></div>${(team.players||[]).map(renderMatchPlayer).join("")}</section>`).join("")}</div></article>`;
+  }).join(""):`<div class="empty">Todavía no encontramos partidas compartidas.</div>`;
+}
+async function loadClashSchedule(){
+  if(!currentInviteCode)return;
+  const notice=$("#clash-notice");
+  const result=await remoteStore.fetchClashSchedule(currentInviteCode);
+  const schedule=(result?.tournaments||[]).flatMap(tournament=>(tournament.schedule||[]).filter(item=>!item.cancelled).map(item=>({...item,name:tournament.name}))).filter(item=>item.startTime>Date.now()).sort((a,b)=>a.startTime-b.startTime)[0];
+  if(!schedule){notice.classList.add("hidden");return;}
+  const starts=new Intl.DateTimeFormat("es-AR",{weekday:"long",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit",timeZone:"Europe/Amsterdam"}).format(new Date(schedule.startTime));
+  notice.innerHTML=`<span>⚔</span><div><strong>Próximo Clash${schedule.name?`: ${escapeHtml(schedule.name)}`:""}</strong><small>${escapeHtml(starts)} · horario de Ámsterdam</small></div>`;
+  notice.classList.remove("hidden");
 }
 function applyProfile(player,profile){if(!player||!profile)return;player.profileIconUrl=profile.profileIconUrl;player.rankTier=profile.rankTier;player.rankDisplay=profile.rankDisplay;player.recentGames=profile.recentGames||[];player.recentMatchSummaries=profile.recentMatchSummaries||[];persist();}
 async function pollForRiotProfile(name,maxAttempts=10){for(let attempt=0;attempt<maxAttempts;attempt++){await refreshRemote();const player=state.players.find(item=>item.name.toLowerCase()===name.toLowerCase());if(player&&(player.profileIconUrl||player.rankTier||(player.recentGames||[]).length))return true;await new Promise(resolve=>setTimeout(resolve,1200));}return false;}

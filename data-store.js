@@ -22,7 +22,7 @@ export const remoteStore = {
   async load() {
     if (!enabled) return null;
     const week = encodeURIComponent(weekStart());
-    const players = await request(endpoint("players", `?game_date=eq.${week}&select=name,slots,locked_in,joined_at&order=joined_at.asc`));
+    const players = await request(endpoint("players", `?game_date=eq.${week}&select=name,slots,joined_at&order=joined_at.asc`));
     let profiles = [];
     try { profiles = await request(endpoint("riot_profiles", "?select=riot_id,profile_icon_url,rank_tier,rank_display,recent_games,recent_match_summaries")); }
     catch (error) {
@@ -34,13 +34,18 @@ export const remoteStore = {
     return { date:weekStart(), players:players.map(player => {
       const profile = byId.get(player.name.toLowerCase());
       return {
-        name:player.name, slots:player.slots || [], lockedIn:Boolean(player.locked_in),
+        name:player.name, slots:player.slots || [],
         joinedAt:new Date(player.joined_at).getTime(), profileIconUrl:profile?.profile_icon_url,
         rankTier:profile?.rank_tier, rankDisplay:profile?.rank_display,
         recentGames:profile?.recent_games || [],
         recentMatchSummaries:profile?.recent_match_summaries || []
       };
-    }) };
+    }), sharedGames:await this.loadSharedGames() };
+  },
+  async loadSharedGames() {
+    if (!enabled) return [];
+    try { return await request(endpoint("shared_matches", "?select=match_id,game_start,duration_seconds,queue_id,teams,shared_player_count&order=game_start.desc&limit=10")); }
+    catch (error) { console.warn("Shared matches are not configured yet", error); return []; }
   },
   async invoke(functionName, body) {
     if (!enabled) return null;
@@ -50,6 +55,6 @@ export const remoteStore = {
     return this.invoke("lobby-join", { name, invitationCode, ownerToken });
   },
   async saveSlots(name, slots, ownerToken) { return this.invoke("lobby-update", { name, slots, ownerToken }); },
-  async setLocked(name, lockedIn, ownerToken) { return this.invoke("lobby-update", { name, lockedIn, ownerToken }); },
-  async fetchRiotProfile(gameName, tagLine, invitationCode) { return this.invoke("riot-profile", { gameName, tagLine, invitationCode }); }
+  async fetchRiotProfile(gameName, tagLine, invitationCode) { return this.invoke("riot-profile", { gameName, tagLine, invitationCode }); },
+  async fetchClashSchedule(invitationCode) { return this.invoke("clash-schedule", { invitationCode }); }
 };

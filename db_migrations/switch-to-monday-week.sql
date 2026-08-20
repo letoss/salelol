@@ -12,7 +12,7 @@ begin
   old_sunday := local_today - extract(dow from local_today)::integer;
   new_monday := old_sunday + 1;
 
-  insert into public.players (game_date, name, slots, locked_in, joined_at, last_seen)
+  insert into public.players (game_date, name, slots, joined_at, last_seen)
   select new_monday,
          name,
          array(
@@ -21,7 +21,6 @@ begin
            where (slot::timestamptz at time zone 'Europe/Amsterdam')::date
                  between new_monday and new_monday + 6
          ),
-         locked_in,
          joined_at,
          last_seen
   from public.players
@@ -33,7 +32,6 @@ begin
         where (slot::timestamptz at time zone 'Europe/Amsterdam')::date
               between new_monday and new_monday + 6
       ),
-      locked_in = public.players.locked_in or excluded.locked_in,
       joined_at = least(public.players.joined_at, excluded.joined_at),
       last_seen = greatest(public.players.last_seen, excluded.last_seen);
 

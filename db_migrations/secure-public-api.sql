@@ -37,7 +37,7 @@ drop policy if exists "Anyone can propose today's matches" on public.matches;
 drop policy if exists "Anyone can remove today's match proposals" on public.matches;
 
 revoke all on public.players from anon, authenticated;
-grant select(game_date,name,slots,locked_in,joined_at,last_seen) on public.players to anon, authenticated;
+grant select(game_date,name,slots,joined_at,last_seen) on public.players to anon, authenticated;
 revoke all on public.matches from anon, authenticated;
 grant select(id,game_date,match_time,creator,created_at) on public.matches to anon, authenticated;
 
