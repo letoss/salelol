@@ -285,7 +285,7 @@ function renderMatchPlayer(player){
   const icon=player.championIconUrl?`<img src="${escapeHtml(player.championIconUrl)}" alt="${escapeHtml(player.championName||"")}" loading="lazy" />`:`<span>${escapeHtml((player.championName||"?")[0])}</span>`;
   return `<div class="match-player ${player.isOurBoy?"our-boy":""}"><div class="champion-icon">${icon}</div><div class="match-player-copy"><strong>${escapeHtml(compactRiotId(player.riotId))}</strong><small>${escapeHtml(player.championName||"Campeón")}</small></div><b>${Number(player.kills)||0}/${Number(player.deaths)||0}/${Number(player.assists)||0}</b></div>`;
 }
-function matchQueueLabel(queueId){return ({400:"Draft",420:"Solo/Duo",440:"Flex"})[Number(queueId)]||null;}
+function matchQueueLabel(queueId){return ({400:"Draft",420:"Solo/Duo",440:"Flex",450:"ARAM"})[Number(queueId)]||null;}
 function renderSharedGames(){
   const games=Array.isArray(state.sharedGames)?state.sharedGames:[];
   const container=$("#shared-games");
