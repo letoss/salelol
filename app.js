@@ -150,7 +150,7 @@ function render(){
   const players=[...state.players].sort((a,b)=>a.joinedAt-b.joinedAt);
   $("#player-count").textContent=players.length;
   $("#players-list").innerHTML=players.length?players.map((player,index)=>renderPlayer(player,index)).join(""):`<div class="empty">Todavía no entró ningún manco.</div>`;
-  renderDayTabs();renderTimeGrid();renderTodayMatches();renderWeekCalendar(players);renderMancoRanking(players);renderSharedGames();
+  renderDayTabs();renderTimeGrid();renderTodayMatches();renderGamesByHour();renderWeekCalendar(players);renderMancoRanking(players);renderSharedGames();
 }
 function renderPlayer(player,index){
   const days=dayNames.filter((_,day)=>slotsForDay(day).some(slot=>player.slots.includes(slot.id)));
@@ -175,6 +175,28 @@ function availabilitySegments(player,slots){
     }
   });
   return segments;
+}
+function amsterdamHour(value){
+  return Number(new Intl.DateTimeFormat("en-GB",{timeZone:"Europe/Amsterdam",hour:"2-digit",hourCycle:"h23"}).format(new Date(value)));
+}
+function renderGamesByHour(){
+  const games=(state.sharedGames||[]).filter(game=>game.game_start&&!Number.isNaN(new Date(game.game_start).getTime()));
+  const chart=$("#games-by-hour-chart");
+  const summary=$("#games-by-hour-summary");
+  if(!games.length){
+    summary.textContent="Promedio diario según las partidas almacenadas.";
+    chart.innerHTML=`<div class="empty">Todavía no hay partidas para calcular los horarios.</div>`;
+    return;
+  }
+  const totals=Array(24).fill(0);
+  games.forEach(game=>totals[amsterdamHour(game.game_start)]++);
+  const dates=games.map(game=>amsterdamDateKey(game.game_start)).sort();
+  const coveredDays=Math.max(1,Math.round((Date.parse(`${dates.at(-1)}T00:00:00Z`)-Date.parse(`${dates[0]}T00:00:00Z`))/86400000)+1);
+  const averages=totals.map(total=>total/coveredDays);
+  const maxAverage=Math.max(...averages,0.01);
+  const peakHour=averages.indexOf(Math.max(...averages));
+  summary.textContent=`Pico a las ${String(peakHour).padStart(2,"0")}:00 · ${averages[peakHour].toFixed(2)} partidas por día`;
+  chart.innerHTML=`<div class="hour-chart-grid" role="img" aria-label="Promedio diario de partidas por hora">${averages.map((average,hour)=>`<div class="hour-column" title="${String(hour).padStart(2,"0")}:00 · ${average.toFixed(2)} por día · ${totals[hour]} partida${totals[hour]===1?"":"s"}"><span>${average?average.toFixed(2):""}</span><div class="hour-bar-track"><i style="height:${Math.max(average?5:0,(average/maxAverage)*100)}%"></i></div><b>${hour%3===0?String(hour).padStart(2,"0"):""}</b></div>`).join("")}</div><div class="hour-chart-axis"><span>HORA DE INICIO</span><small>${games.length} partidas · ${coveredDays} día${coveredDays===1?"":"s"} analizados</small></div>`;
 }
 function renderWeekCalendar(players){
   $("#week-calendar").innerHTML=dayNames.map((name,day)=>({name,day})).slice(currentWeekDayIndex()).map(({name,day})=>{

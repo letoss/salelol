@@ -62,8 +62,8 @@
         </header>
 
         <nav id="app-tabs" class="app-tabs" role="tablist" aria-label="Secciones del lobby">
-          <button class="app-tab active" type="button" role="tab" data-tab="games-tab" data-route="partidas-recientes" aria-controls="games-tab" aria-selected="true">PARTIDAS RECIENTES</button>
           <button class="app-tab" type="button" role="tab" data-tab="lobby-tab" data-route="lobby" aria-controls="lobby-tab" aria-selected="false">LOBBY</button>
+          <button class="app-tab active" type="button" role="tab" data-tab="games-tab" data-route="partidas-recientes" aria-controls="games-tab" aria-selected="true">PARTIDAS RECIENTES</button>
           <button class="app-tab" type="button" role="tab" data-tab="calendar-tab" data-route="calendario" aria-controls="calendar-tab" aria-selected="false">CALENDARIO</button>
           <button class="app-tab" type="button" role="tab" data-tab="availability-tab" data-route="mi-disponibilidad" aria-controls="availability-tab" aria-selected="false">MI DISPONIBILIDAD</button>
         </nav>
@@ -104,6 +104,13 @@
         </div>
 
         <div id="calendar-tab" class="tab-panel hidden" role="tabpanel">
+          <section class="panel section-card calendar-stats-card">
+            <div class="section-heading">
+              <div><span class="step">STATS</span><h2>Horario de partidas</h2></div>
+              <p id="games-by-hour-summary">Promedio diario según las partidas almacenadas.</p>
+            </div>
+            <div id="games-by-hour-chart" class="games-by-hour-chart"></div>
+          </section>
           <section class="panel section-card week-card calendar-card">
             <div class="section-heading">
               <div><span class="step">SEMANA</span><h2>Calendario semanal</h2></div>
