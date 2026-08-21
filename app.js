@@ -195,8 +195,17 @@ function renderGamesByHour(){
   const averages=totals.map(total=>total/coveredDays);
   const maxAverage=Math.max(...averages,0.01);
   const peakHour=averages.indexOf(Math.max(...averages));
+  const width=760,height=180,left=44,right=12,top=12,bottom=34;
+  const plotWidth=width-left-right,plotHeight=height-top-bottom;
+  const point=(average,hour)=>({x:left+(hour/23)*plotWidth,y:top+(1-average/maxAverage)*plotHeight});
+  const points=averages.map(point);
+  const linePath=points.map(({x,y},index)=>`${index?"L":"M"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
+  const areaPath=`${linePath} L${points.at(-1).x.toFixed(1)} ${height-bottom} L${points[0].x.toFixed(1)} ${height-bottom} Z`;
+  const grid=[0,.25,.5,.75,1].map(position=>`<line x1="${left}" y1="${top+position*plotHeight}" x2="${width-right}" y2="${top+position*plotHeight}" />`).join("");
+  const ticks=averages.map((_,hour)=>hour%3===0?`<text x="${point(0,hour).x}" y="${height-16}">${String(hour).padStart(2,"0")}</text>`:"").join("");
+  const dots=points.map(({x,y},hour)=>totals[hour]?`<circle cx="${x}" cy="${y}" r="4"><title>${String(hour).padStart(2,"0")}:00 · ${averages[hour].toFixed(2)} por día · ${totals[hour]} partida${totals[hour]===1?"":"s"}</title></circle>`:"").join("");
   summary.textContent=`Pico a las ${String(peakHour).padStart(2,"0")}:00 · ${averages[peakHour].toFixed(2)} partidas por día`;
-  chart.innerHTML=`<div class="hour-chart-grid" role="img" aria-label="Promedio diario de partidas por hora">${averages.map((average,hour)=>`<div class="hour-column" title="${String(hour).padStart(2,"0")}:00 · ${average.toFixed(2)} por día · ${totals[hour]} partida${totals[hour]===1?"":"s"}"><span>${average?average.toFixed(2):""}</span><div class="hour-bar-track"><i style="height:${Math.max(average?5:0,(average/maxAverage)*100)}%"></i></div><b>${hour%3===0?String(hour).padStart(2,"0"):""}</b></div>`).join("")}</div><div class="hour-chart-axis"><span>HORA DE INICIO</span><small>${games.length} partidas · ${coveredDays} día${coveredDays===1?"":"s"} analizados</small></div>`;
+  chart.innerHTML=`<div class="hour-line-chart"><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Promedio diario de partidas por hora"><g class="chart-grid">${grid}</g><line class="chart-axis" x1="${left}" y1="${top}" x2="${left}" y2="${height-bottom}"/><line class="chart-axis" x1="${left}" y1="${height-bottom}" x2="${width-right}" y2="${height-bottom}"/><path class="hour-area" d="${areaPath}"/><path class="hour-line" d="${linePath}"/><g class="hour-dots">${dots}</g><g class="chart-ticks">${ticks}</g><text class="axis-label axis-label-x" x="${left+plotWidth/2}" y="${height-2}">X · HORA DE INICIO</text><text class="axis-label axis-label-y" x="${-(top+plotHeight/2)}" y="12" transform="rotate(-90)">Y · PARTIDAS / DÍA</text></svg></div><div class="hour-chart-meta"><small>${games.length} partidas · ${coveredDays} día${coveredDays===1?"":"s"} analizados</small></div>`;
 }
 function renderWeekCalendar(players){
   $("#week-calendar").innerHTML=dayNames.map((name,day)=>({name,day})).slice(currentWeekDayIndex()).map(({name,day})=>{
