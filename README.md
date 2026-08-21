@@ -38,3 +38,41 @@ To upgrade Recent Games to a rolling month, run `db_migrations/retain-one-month-
 Clash notifications use Riot's EUW `clash-v1` schedule and the existing `RIOT_API_KEY` secret.
 
 Live-game notifications use Riot Spectator-V5. Run `db_migrations/add-live-game-cache.sql` and deploy `supabase/functions/live-games/index.ts` as the `live-games` Edge Function. It reuses `RIOT_API_KEY` and `LOBBY_INVITE_TOKEN`, caches checks for 75 seconds, and exposes only the registered players currently in a game.
+
+## Windows live-stats companion
+
+The Tauri application under `desktop/` reads the local Riot Live Client Data API and publishes only the active player's own KDA and CS. SaleLoL continues to show every registered player detected by Spectator-V5; a `LIVE` badge and live KDA appear only when that player is running the companion.
+
+### Supabase deployment
+
+1. Run `db_migrations/add-desktop-live-stats.sql` in **Supabase Dashboard > SQL Editor**.
+2. Create and deploy a new Edge Function named `live-stats-update` using `supabase/functions/live-stats-update/index.ts`.
+3. Redeploy `live-games` using the updated `supabase/functions/live-games/index.ts`.
+4. Reuse the existing `LOBBY_INVITE_TOKEN`; no additional secret is required.
+
+The companion receives a device ownership token from `lobby-join`. It never contains the Riot API key or Supabase service-role key. Live rows cannot be read or written directly by anonymous clients, and records older than 35 seconds are ignored.
+
+### Build the Windows installer
+
+Install the [Tauri Windows prerequisites](https://v2.tauri.app/start/prerequisites/), then:
+
+```bash
+cd desktop
+npm install
+npm run build
+```
+
+The NSIS installer is created under `desktop/src-tauri/target/release/bundle/nsis/`. The **Build Windows companion** GitHub Action can also be run manually and uploads the installer as an artifact.
+
+### Report the companion to Riot
+
+Before sharing the installer beyond development testing:
+
+1. Open the SaleLoL product in the [Riot Developer Portal](https://developer.riotgames.com/) or register it if it is not registered yet.
+2. In the product description/application notes, disclose the native Windows companion and the exact local endpoint: `GET /liveclientdata/allgamedata` on `https://127.0.0.1:2999`.
+3. Explain that the typed Riot ID must match `activePlayer.riotId`, only that player's visible KDA/CS is transmitted, participation is opt-in, and data expires after 35 seconds.
+4. State that the data is shown only to the private SaleLoL lobby, provides no recommendations or hidden enemy information, and is never sold or shared with another service.
+5. Include the SaleLoL URL, screenshots of this login/status flow, a Windows test build, privacy/retention details, and Riot's required product disclaimer.
+6. Ask Riot to acknowledge this updated use case before enabling broad distribution. Keep the product notes current whenever the collected fields or endpoints change.
+
+Riot documents the Game Client APIs as local-only native APIs and asks developers to disclose which client endpoints they use. The companion deliberately validates the local active player instead of collecting the other nine participants.

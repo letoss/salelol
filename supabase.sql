@@ -54,6 +54,20 @@ create table if not exists public.live_game_cache (
 );
 insert into public.live_game_cache(id,players,checked_at) values(1,'[]'::jsonb,to_timestamp(0)) on conflict(id) do nothing;
 
+create table if not exists public.desktop_live_stats (
+  riot_id extensions.citext primary key,
+  champion_name text not null check (char_length(champion_name) between 1 and 40),
+  kills smallint not null default 0 check (kills between 0 and 100),
+  deaths smallint not null default 0 check (deaths between 0 and 100),
+  assists smallint not null default 0 check (assists between 0 and 200),
+  creep_score integer not null default 0 check (creep_score between 0 and 5000),
+  ward_score numeric(8,2) not null default 0 check (ward_score between 0 and 10000),
+  game_time_seconds integer not null default 0 check (game_time_seconds between 0 and 86400),
+  game_mode text,
+  updated_at timestamptz not null default now()
+);
+create index if not exists desktop_live_stats_updated_at_idx on public.desktop_live_stats(updated_at desc);
+
 create index if not exists shared_matches_game_start_idx
 on public.shared_matches (game_start desc);
 
@@ -79,6 +93,7 @@ alter table public.matches enable row level security;
 alter table public.api_rate_limits enable row level security;
 alter table public.shared_matches enable row level security;
 alter table public.live_game_cache enable row level security;
+alter table public.desktop_live_stats enable row level security;
 
 create or replace function public.consume_api_rate_limit(rate_scope text, rate_identifier text, rate_limit integer, window_seconds integer)
 returns boolean language plpgsql security definer set search_path=public as $$
@@ -113,6 +128,7 @@ revoke all on public.api_rate_limits from anon, authenticated;
 revoke all on public.shared_matches from anon, authenticated;
 grant select(match_id,game_start,duration_seconds,queue_id,teams,shared_player_count) on public.shared_matches to anon, authenticated;
 revoke all on public.live_game_cache from anon, authenticated;
+revoke all on public.desktop_live_stats from anon, authenticated;
 
 alter publication supabase_realtime add table public.players;
 alter publication supabase_realtime add table public.matches;

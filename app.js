@@ -318,7 +318,7 @@ function renderLiveGames(){
   const popup=$("#live-game-popup");
   if(!liveGamePlayers.length||lobbyView.classList.contains("hidden")){popup.classList.add("hidden");return;}
   $("#live-game-count").textContent=`${liveGamePlayers.length} manco${liveGamePlayers.length===1?"":"s"} manqueando`;
-  $("#live-game-players").innerHTML=liveGamePlayers.map(player=>{const icon=player.championIconUrl?`<img src="${escapeHtml(player.championIconUrl)}" alt="${escapeHtml(player.championName||"")}" />`:`<span>${escapeHtml((player.championName||"?")[0])}</span>`;const queue=matchQueueLabel(player.queueId);return `<div class="live-game-player"><div class="live-champion">${icon}</div><div><strong>${escapeHtml(compactRiotId(player.riotId))}</strong><small>${escapeHtml(player.championName||"Campeón")}${queue?` · ${escapeHtml(queue)}`:""}</small></div><time>${liveGameElapsed(player.gameStartTime)}</time></div>`;}).join("");
+  $("#live-game-players").innerHTML=liveGamePlayers.map(player=>{const icon=player.championIconUrl?`<img src="${escapeHtml(player.championIconUrl)}" alt="${escapeHtml(player.championName||"")}" />`:`<span>${escapeHtml((player.championName||"?")[0])}</span>`;const queue=matchQueueLabel(player.queueId);const live=player.liveStats;const detail=live?`${Number(live.kills)||0}/${Number(live.deaths)||0}/${Number(live.assists)||0} KDA · ${Number(live.creepScore)||0} CS`:`${escapeHtml(player.championName||"Campeón")}${queue?` · ${escapeHtml(queue)}`:""}`;return `<div class="live-game-player ${live?"has-live-stats":""}"><div class="live-champion">${icon}</div><div><strong>${escapeHtml(compactRiotId(player.riotId))}${live?`<b class="desktop-live-badge">LIVE</b>`:""}</strong><small>${detail}</small></div><time>${liveGameElapsed(player.gameStartTime)}</time></div>`;}).join("");
   popup.classList.remove("hidden");
 }
 async function loadLiveGames(){if(!currentInviteCode||document.hidden)return;const result=await remoteStore.fetchLiveGames(currentInviteCode);liveGamePlayers=Array.isArray(result?.players)?result.players:[];renderLiveGames();}
@@ -327,7 +327,7 @@ async function pollForRiotProfile(name,maxAttempts=10){for(let attempt=0;attempt
 async function refreshRemote(){const remote=await remoteStore.load();if(!remote)return;Object.assign(state,remote);localStorage.setItem(storeKey,JSON.stringify(state));render();}
 window.addEventListener("storage",event=>{if(event.key===storeKey&&event.newValue){Object.assign(state,JSON.parse(event.newValue));render();}});
 if(remoteStore.enabled){refreshRemote().catch(console.error);setInterval(()=>refreshRemote().catch(console.error),5000);}
-setInterval(()=>loadLiveGames().catch(console.error),60000);
+setInterval(()=>loadLiveGames().catch(console.error),15000);
 setInterval(renderLiveGames,30000);
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)loadLiveGames().catch(console.error);});
 validateRiotId();

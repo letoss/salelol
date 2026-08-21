@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>SaleLoL Companion</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <span>SALELOL</span>
+        <h1>Live Companion</h1>
+        <p>Comparte únicamente tus propias estadísticas mientras estás en partida.</p>
+      </header>
+
+      <form id="credentials-form">
+        <label>
+          Riot ID
+          <span class="riot-fields">
+            <input id="game-name" maxlength="16" autocomplete="username" placeholder="Nombre" required />
+            <b>#</b>
+            <input id="tag-line" maxlength="5" placeholder="TAG" required />
+          </span>
+        </label>
+        <label>
+          Código de invitación
+          <span class="secret-field">
+            <input id="invite-code" type="password" autocomplete="current-password" required />
+            <button id="toggle-secret" type="button">MOSTRAR</button>
+          </span>
+        </label>
+        <button id="connect-button" class="primary" type="submit">CONECTAR</button>
+        <button id="disconnect-button" class="secondary hidden" type="button">DESCONECTAR</button>
+      </form>
+
+      <section class="status-card" aria-live="polite">
+        <i id="status-dot"></i>
+        <div>
+          <strong id="status-title">Sin conectar</strong>
+          <small id="status-detail">Ingresá las mismas credenciales que usás en SaleLoL.</small>
+        </div>
+      </section>
+
+      <section id="live-preview" class="live-preview hidden">
+        <span>ENVIANDO</span>
+        <strong id="live-champion"></strong>
+        <b id="live-kda"></b>
+        <small id="live-extra"></small>
+      </section>
+    </main>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>
