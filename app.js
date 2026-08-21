@@ -21,6 +21,8 @@ let mancoExpanded = loadMancoExpanded();
 let selectedMatchId = null;
 let renderedMatchSignature = "";
 let liveGamePlayers = [];
+let liveGameOutcome = null;
+let liveOutcomeTimer = null;
 const liveStatSnapshots = new Map();
 const liveActionMessages = new Map();
 const killMessages = ["de pedo", "como carreo papá", "ahh izi"];
@@ -347,22 +349,32 @@ function livePlayerCard(player,compact=false){
 function renderLiveGames(){
   const popup=$("#live-game-popup");
   const stage=$("#live-game-stage"),defaultContent=$("#lobby-default-content");
+  const outcome=$("#live-game-outcome"),stageHeader=stage.querySelector(".live-stage-header"),stagePlayers=$("#live-stage-players"),stageNote=$("#live-stage-note");
   const lobbyTabActive=document.querySelector('[data-tab="lobby-tab"]')?.classList.contains("active")&&!lobbyView.classList.contains("hidden");
   const hasGame=liveGamePlayers.length>0;
-  stage.classList.toggle("hidden",!hasGame);
-  defaultContent.classList.toggle("hidden",hasGame);
-  if(hasGame){
+  const hasOutcome=liveGameOutcome&&Date.now()-new Date(liveGameOutcome.updatedAt).getTime()<120_000;
+  stage.classList.toggle("hidden",!hasGame&&!hasOutcome);
+  defaultContent.classList.toggle("hidden",hasGame||hasOutcome);
+  outcome.classList.toggle("hidden",!hasOutcome);
+  stageHeader.classList.toggle("hidden",hasOutcome);
+  stagePlayers.classList.toggle("hidden",hasOutcome);
+  stageNote.classList.toggle("hidden",hasOutcome);
+  if(hasOutcome){
+    const won=liveGameOutcome.result==="win",label=won?"VICTORIA":"DERROTA";
+    outcome.className=`live-game-outcome ${won?"victory":"defeat"}`;
+    outcome.innerHTML=`<div class="outcome-rays" aria-hidden="true"></div><svg viewBox="0 0 160 130" aria-hidden="true"><path class="outcome-wing" d="M80 8 105 34 144 25 124 63 148 91 106 94 80 122 54 94 12 91 36 63 16 25 55 34Z"/><path class="outcome-core" d="m80 25 25 38-25 42-25-42Z"/><path class="outcome-cut" d="m80 42 11 21-11 22-11-22Z"/></svg><span>FIN DE LA PARTIDA</span><strong>${label}</strong><small>${escapeHtml(compactRiotId(liveGameOutcome.riotId))} · ${Number(liveGameOutcome.kills)||0}/${Number(liveGameOutcome.deaths)||0}/${Number(liveGameOutcome.assists)||0}</small>`;
+  }else if(hasGame){
     const livePlayers=liveGamePlayers.filter(player=>player.liveStats),withoutClient=liveGamePlayers.length-livePlayers.length;
     $("#live-stage-players").innerHTML=liveGamePlayers.map(player=>livePlayerCard(player)).join("");
     $("#live-stage-time").textContent=liveGameElapsed(liveGamePlayers[0]?.gameStartTime);
     $("#live-stage-note").textContent=withoutClient?`${withoutClient} jugador${withoutClient===1?"":"es"} detectado${withoutClient===1?"":"s"} sin datos del companion.`:`Stats en vivo de ${livePlayers.length} manco${livePlayers.length===1?"":"s"}.`;
   }
-  if(!hasGame||lobbyTabActive||lobbyView.classList.contains("hidden")){popup.classList.add("hidden");return;}
+  if(!hasGame||hasOutcome||lobbyTabActive||lobbyView.classList.contains("hidden")){popup.classList.add("hidden");return;}
   $("#live-game-count").textContent=`${liveGamePlayers.length} manco${liveGamePlayers.length===1?"":"s"} manqueando`;
   $("#live-game-players").innerHTML=liveGamePlayers.map(player=>livePlayerCard(player,true)).join("");
   popup.classList.remove("hidden");
 }
-async function loadLiveGames(){if(!currentInviteCode||document.hidden)return;const result=await remoteStore.fetchLiveGames(currentInviteCode);const players=Array.isArray(result?.players)?result.players:[];captureLiveActions(players);liveGamePlayers=players;renderLiveGames();}
+async function loadLiveGames(){if(!currentInviteCode||document.hidden)return;const result=await remoteStore.fetchLiveGames(currentInviteCode);const players=Array.isArray(result?.players)?result.players:[];const finished=Array.isArray(result?.finishedGames)?result.finishedGames:[];captureLiveActions(players);liveGamePlayers=players;liveGameOutcome=finished.find(item=>String(item.riotId||"").toLocaleLowerCase()===currentName.toLocaleLowerCase())||finished[0]||null;clearTimeout(liveOutcomeTimer);if(liveGameOutcome){const remaining=120_000-(Date.now()-new Date(liveGameOutcome.updatedAt).getTime());liveOutcomeTimer=setTimeout(()=>{liveGameOutcome=null;renderLiveGames();},Math.max(0,remaining)+50);}renderLiveGames();}
 function applyProfile(player,profile){if(!player||!profile)return;player.profileIconUrl=profile.profileIconUrl;player.rankTier=profile.rankTier;player.rankDisplay=profile.rankDisplay;player.recentGames=profile.recentGames||[];player.recentMatchSummaries=profile.recentMatchSummaries||[];persist();}
 async function pollForRiotProfile(name,maxAttempts=10){for(let attempt=0;attempt<maxAttempts;attempt++){await refreshRemote();const player=state.players.find(item=>item.name.toLowerCase()===name.toLowerCase());if(player&&(player.profileIconUrl||player.rankTier||(player.recentGames||[]).length))return true;await new Promise(resolve=>setTimeout(resolve,1200));}return false;}
 async function refreshRemote(){const remote=await remoteStore.load();if(!remote)return;Object.assign(state,remote);localStorage.setItem(storeKey,JSON.stringify(state));render();}

@@ -64,6 +64,7 @@ create table if not exists public.desktop_live_stats (
   ward_score numeric(8,2) not null default 0 check (ward_score between 0 and 10000),
   game_time_seconds integer not null default 0 check (game_time_seconds between 0 and 86400),
   game_mode text,
+  game_result text check (game_result in ('win','loss')),
   updated_at timestamptz not null default now()
 );
 create index if not exists desktop_live_stats_updated_at_idx on public.desktop_live_stats(updated_at desc);

@@ -1,6 +1,6 @@
 [package]
 name = "salelol-companion"
-version = "0.1.1"
+version = "0.1.2"
 description = "SaleLoL live game companion"
 authors = ["SaleLoL"]
 edition = "2021"

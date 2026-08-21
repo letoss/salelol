@@ -5,7 +5,7 @@ const invoke=window.__TAURI__.core.invoke;
 const $=selector=>document.querySelector(selector);
 const form=$("#credentials-form"),connectButton=$("#connect-button"),disconnectButton=$("#disconnect-button");
 const statusCard=$(".status-card"),preview=$("#live-preview");
-let session=null,pollTimer=null,wasLive=false;
+let session=null,pollTimer=null,wasLive=false,lastGameResult=null;
 
 function cleanCredentials(){return {gameName:$("#game-name").value.trim().replace(/\s+/g," ").slice(0,16),tagLine:$("#tag-line").value.trim().replace(/[^a-zA-Z0-9]/g,"").slice(0,5),invitationCode:$("#invite-code").value.trim()};}
 function riotId(credentials){return `${credentials.gameName}#${credentials.tagLine}`;}
@@ -18,8 +18,8 @@ async function poll(){
   if(!session)return;
   try{
     const stats=await invoke("read_live_stats",{riotId:riotId(session)});
-    if(!stats){if(wasLive)await publish(false);wasLive=false;preview.classList.add("hidden");setStatus("connected","Conectado","Esperando que comience una partida de League of Legends…");return;}
-    await publish(true,stats);wasLive=true;showLive(stats);setStatus("live","Transmitiendo tus stats","SaleLoL está recibiendo exclusivamente tus datos en vivo.");
+    if(!stats){if(wasLive)await publish(false);wasLive=false;lastGameResult=null;preview.classList.add("hidden");setStatus("connected","Conectado","Esperando que comience una partida de League of Legends…");return;}
+    await publish(true,stats);wasLive=true;lastGameResult=stats.gameResult||lastGameResult;showLive(stats);setStatus("live",lastGameResult?lastGameResult==="win"?"Victoria reportada":"Derrota reportada":"Transmitiendo tus stats",lastGameResult?"SaleLoL mostrará el resultado durante dos minutos.":"SaleLoL está recibiendo exclusivamente tus datos en vivo.");
   }catch(error){preview.classList.add("hidden");setStatus("error","No se pudo leer la partida",String(error).replace(/^Error:\s*/,""));}
 }
 async function connect(credentials){

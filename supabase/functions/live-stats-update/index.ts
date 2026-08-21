@@ -23,12 +23,14 @@ Deno.serve(async(request)=>{
     if(playerError)throw playerError;
     const tokenHash=await hash(ownerToken);
     if(!player||(player.owner_token_hash!==tokenHash&&!(player.owner_token_hashes||[]).includes(tokenHash)))return json({error:"Not your player"},403);
-    if(active===false){const {error}=await db.from("desktop_live_stats").delete().eq("riot_id",cleanName);if(error)throw error;return json({ok:true,active:false});}
+    if(active===false){const {error}=await db.from("desktop_live_stats").delete().eq("riot_id",cleanName).is("game_result",null);if(error)throw error;return json({ok:true,active:false});}
     if(!stats||typeof stats!=="object")return json({error:"Missing live stats"},400);
     const championName=String(stats.championName||"").trim();
     const gameMode=stats.gameMode==null?null:String(stats.gameMode).trim().slice(0,40);
+    const gameResult=stats.gameResult==null?null:String(stats.gameResult).toLowerCase();
+    if(gameResult!==null&&gameResult!=="win"&&gameResult!=="loss")return json({error:"Invalid game result"},400);
     if(!championName||championName.length>40||!integer(stats.kills,0,100)||!integer(stats.deaths,0,100)||!integer(stats.assists,0,200)||!integer(stats.creepScore,0,5000)||!Number.isFinite(stats.wardScore)||Number(stats.wardScore)<0||Number(stats.wardScore)>10000||!integer(stats.gameTimeSeconds,0,86400))return json({error:"Invalid live stats"},400);
-    const {error}=await db.from("desktop_live_stats").upsert({riot_id:cleanName,champion_name:championName,kills:stats.kills,deaths:stats.deaths,assists:stats.assists,creep_score:stats.creepScore,ward_score:Number(stats.wardScore),game_time_seconds:stats.gameTimeSeconds,game_mode:gameMode,updated_at:new Date().toISOString()},{onConflict:"riot_id"});
+    const {error}=await db.from("desktop_live_stats").upsert({riot_id:cleanName,champion_name:championName,kills:stats.kills,deaths:stats.deaths,assists:stats.assists,creep_score:stats.creepScore,ward_score:Number(stats.wardScore),game_time_seconds:stats.gameTimeSeconds,game_mode:gameMode,game_result:gameResult,updated_at:new Date().toISOString()},{onConflict:"riot_id"});
     if(error)throw error;
     return json({ok:true,active:true});
   }catch(error){console.error(error);return json({error:"Live-stat update failed"},500);}

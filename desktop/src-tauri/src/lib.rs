@@ -13,6 +13,7 @@ struct LiveStats {
     ward_score: f64,
     game_time_seconds: i64,
     game_mode: Option<String>,
+    game_result: Option<String>,
 }
 
 fn text(value: Option<&Value>) -> String {
@@ -51,6 +52,18 @@ async fn read_live_stats(riot_id: String) -> Result<Option<LiveStats>, String> {
     let player = players.iter().find(|player| text(player.get("riotId")).eq_ignore_ascii_case(riot_id.trim())).ok_or("No encontramos al jugador activo en la partida.")?;
     let scores = player.get("scores").ok_or("La partida todavía no tiene puntuaciones disponibles.")?;
     let game_data = data.get("gameData");
+    let game_result = data
+        .get("events")
+        .and_then(|events| events.get("Events"))
+        .and_then(Value::as_array)
+        .and_then(|events| events.iter().rev().find(|event| text(event.get("EventName")).eq_ignore_ascii_case("GameEnd")))
+        .and_then(|event| event.get("Result"))
+        .and_then(Value::as_str)
+        .and_then(|result| match result.to_ascii_lowercase().as_str() {
+            "win" | "victory" => Some("win".to_string()),
+            "lose" | "loss" | "defeat" => Some("loss".to_string()),
+            _ => None,
+        });
     Ok(Some(LiveStats {
         champion_name: text(player.get("championName")),
         kills: scores.get("kills").and_then(Value::as_i64).unwrap_or(0),
@@ -60,6 +73,7 @@ async fn read_live_stats(riot_id: String) -> Result<Option<LiveStats>, String> {
         ward_score: scores.get("wardScore").and_then(Value::as_f64).unwrap_or(0.0),
         game_time_seconds: game_data.and_then(|game| game.get("gameTime")).and_then(Value::as_f64).unwrap_or(0.0).round() as i64,
         game_mode: game_data.and_then(|game| game.get("gameMode")).and_then(Value::as_str).map(str::to_string),
+        game_result,
     }))
 }
 

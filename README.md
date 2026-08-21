@@ -46,6 +46,7 @@ The Tauri application under `desktop/` reads the local Riot Live Client Data API
 ### Supabase deployment
 
 1. Run `db_migrations/add-desktop-live-stats.sql` in **Supabase Dashboard > SQL Editor**.
+   If the live-stats table already exists, run `db_migrations/add-live-game-results.sql` instead.
 2. Create and deploy a new Edge Function named `live-stats-update` using `supabase/functions/live-stats-update/index.ts`.
 3. Redeploy `live-games` using the updated `supabase/functions/live-games/index.ts`.
 4. Reuse the existing `LOBBY_INVITE_TOKEN`; no additional secret is required.
