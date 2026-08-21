@@ -52,7 +52,9 @@ input:focus { border-color:var(--gold); box-shadow:0 0 0 2px rgba(200,155,60,.15
 .section-heading>div { display:flex; align-items:center; gap:12px; }
 .section-heading h2 { font-size:1.05rem; }
 .section-heading p { margin:0; color:var(--muted); font-size:.78rem; }
-.shared-games-balance { border:1px solid currentColor; border-radius:999px; padding:4px 8px; font-size:.62rem; font-weight:900; letter-spacing:.04em; line-height:1; text-transform:uppercase; white-space:nowrap; }
+.shared-games-balance { display:inline-flex; align-items:center; gap:6px; border:1px solid currentColor; border-radius:3px; padding:5px 8px; font-size:.62rem; font-weight:900; letter-spacing:.04em; line-height:1; text-transform:uppercase; white-space:nowrap; box-shadow:inset 0 0 0 1px rgba(240,230,210,.06),0 0 12px color-mix(in srgb,currentColor 12%,transparent); }
+.shared-games-balance small { color:var(--muted); font-size:.52rem; font-weight:800; letter-spacing:.08em; }
+.shared-games-balance b { color:currentColor; font-size:inherit; }
 .shared-games-balance.positive { color:#46d39a; background:rgba(70,211,154,.12); box-shadow:0 0 12px rgba(70,211,154,.12); }
 .shared-games-balance.negative { color:#ff6b6b; background:rgba(255,107,107,.12); box-shadow:0 0 12px rgba(255,107,107,.12); }
 .shared-games-balance.neutral { color:var(--gold); background:rgba(200,155,60,.1); }

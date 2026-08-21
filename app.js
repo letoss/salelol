@@ -228,7 +228,7 @@ function renderSharedGamesBalance(games){
   const balance=wins-losses;
   const indicator=$("#shared-games-balance");
   indicator.className=`shared-games-balance ${balance>0?"positive":balance<0?"negative":"neutral"}`;
-  indicator.textContent=`${balance>0?"+":""}${balance} · ${sharedGamesBalanceLabel(balance)}`;
+  $("#shared-games-balance-value").textContent=`${balance>0?"+":""}${balance} · ${sharedGamesBalanceLabel(balance)}`;
   indicator.title=`${wins} victoria${wins===1?"":"s"} · ${losses} derrota${losses===1?"":"s"}`;
 }
 function gameMessage(game){
