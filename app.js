@@ -214,6 +214,23 @@ function amsterdamDateKey(value){const parts=new Intl.DateTimeFormat("en-CA",{ti
 function compactRiotId(value){return String(value||"Desconocido").split("#")[0];}
 function ourPlayers(game){return (game.teams||[]).flatMap(team=>team.players||[]).filter(player=>player.isOurBoy);}
 function sharedGameWon(game){return ourPlayers(game).some(player=>player.win);}
+function sharedGamesBalanceLabel(balance){
+  if(balance<=-5)return "desinstalen";
+  if(balance<=-3)return "mancasos";
+  if(balance<0)return "pongan huevo";
+  if(balance===0)return "sape";
+  if(balance<=2)return "epico";
+  return "tutorial completado";
+}
+function renderSharedGamesBalance(games){
+  const wins=games.filter(sharedGameWon).length;
+  const losses=games.length-wins;
+  const balance=wins-losses;
+  const indicator=$("#shared-games-balance");
+  indicator.className=`shared-games-balance ${balance>0?"positive":balance<0?"negative":"neutral"}`;
+  indicator.textContent=`${balance>0?"+":""}${balance} · ${sharedGamesBalanceLabel(balance)}`;
+  indicator.title=`${wins} victoria${wins===1?"":"s"} · ${losses} derrota${losses===1?"":"s"}`;
+}
 function gameMessage(game){
   const ours=(game.teams||[]).flatMap(team=>team.players||[]).filter(player=>player.isOurBoy);
   const won=ours.some(player=>player.win);
@@ -236,6 +253,7 @@ function renderSharedGames(){
   const container=$("#shared-games");
   const previousHistory=container.querySelector(".match-history");
   const previousScroll={top:previousHistory?.scrollTop||0,left:previousHistory?.scrollLeft||0};
+  renderSharedGamesBalance(games);
   if(!games.length){selectedMatchId=null;if(renderedMatchSignature!=="empty"){container.innerHTML=`<div class="empty">Todavía no encontramos partidas compartidas.</div>`;renderedMatchSignature="empty";}return;}
   if(!games.some(game=>game.match_id===selectedMatchId))selectedMatchId=games[0].match_id;
   const signature=`${selectedMatchId}:${JSON.stringify(games)}`;

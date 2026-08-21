@@ -52,6 +52,11 @@ input:focus { border-color:var(--gold); box-shadow:0 0 0 2px rgba(200,155,60,.15
 .section-heading>div { display:flex; align-items:center; gap:12px; }
 .section-heading h2 { font-size:1.05rem; }
 .section-heading p { margin:0; color:var(--muted); font-size:.78rem; }
+.shared-games-balance { border:1px solid currentColor; border-radius:999px; padding:4px 8px; font-size:.62rem; font-weight:900; letter-spacing:.04em; line-height:1; text-transform:uppercase; white-space:nowrap; }
+.shared-games-balance.positive { color:#46d39a; background:rgba(70,211,154,.12); box-shadow:0 0 12px rgba(70,211,154,.12); }
+.shared-games-balance.negative { color:#ff6b6b; background:rgba(255,107,107,.12); box-shadow:0 0 12px rgba(255,107,107,.12); }
+.shared-games-balance.neutral { color:var(--gold); background:rgba(200,155,60,.1); }
+.recent-games-card .section-heading>div { flex-wrap:wrap; }
 .step { color:var(--gold); font-family:Cinzel,serif; font-size:.72rem; }
 .players-list { display:grid; gap:10px; }
 .player { display:flex; align-items:center; gap:12px; padding:12px; border:1px solid rgba(120,90,40,.35); background:rgba(30,35,40,.55); }
