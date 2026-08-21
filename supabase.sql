@@ -47,6 +47,13 @@ create table if not exists public.shared_matches (
   refreshed_at timestamptz not null default now()
 );
 
+create table if not exists public.live_game_cache (
+  id smallint primary key default 1 check (id = 1),
+  players jsonb not null default '[]'::jsonb,
+  checked_at timestamptz not null default now()
+);
+insert into public.live_game_cache(id,players,checked_at) values(1,'[]'::jsonb,to_timestamp(0)) on conflict(id) do nothing;
+
 create index if not exists shared_matches_game_start_idx
 on public.shared_matches (game_start desc);
 
@@ -71,6 +78,7 @@ alter table public.players enable row level security;
 alter table public.matches enable row level security;
 alter table public.api_rate_limits enable row level security;
 alter table public.shared_matches enable row level security;
+alter table public.live_game_cache enable row level security;
 
 create or replace function public.consume_api_rate_limit(rate_scope text, rate_identifier text, rate_limit integer, window_seconds integer)
 returns boolean language plpgsql security definer set search_path=public as $$
@@ -104,6 +112,7 @@ grant select(id,game_date,match_time,creator,created_at) on public.matches to an
 revoke all on public.api_rate_limits from anon, authenticated;
 revoke all on public.shared_matches from anon, authenticated;
 grant select(match_id,game_start,duration_seconds,queue_id,teams,shared_player_count) on public.shared_matches to anon, authenticated;
+revoke all on public.live_game_cache from anon, authenticated;
 
 alter publication supabase_realtime add table public.players;
 alter publication supabase_realtime add table public.matches;

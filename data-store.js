@@ -57,5 +57,6 @@ export const remoteStore = {
   },
   async saveSlots(name, slots, ownerToken) { return this.invoke("lobby-update", { name, slots, ownerToken }); },
   async fetchRiotProfile(gameName, tagLine, invitationCode) { return this.invoke("riot-profile", { gameName, tagLine, invitationCode }); },
-  async fetchClashSchedule(invitationCode) { return this.invoke("clash-schedule", { invitationCode }); }
+  async fetchClashSchedule(invitationCode) { return this.invoke("clash-schedule", { invitationCode }); },
+  async fetchLiveGames(invitationCode) { return this.invoke("live-games", { invitationCode }); }
 };

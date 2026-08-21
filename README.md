@@ -36,3 +36,5 @@ For Recent Games and the removal of the old lock-in state, run `db_migrations/ad
 To upgrade Recent Games to a rolling month, run `db_migrations/retain-one-month-shared-matches.sql` and redeploy `riot-profile`. The migration adds indexed 30-day retention, a cleanup trigger, and a daily Supabase cron cleanup. The desktop UI shows a compact match navigator on the left and one selected match on the right; the latest match is selected by default. “Mancos de la semana” is calculated from every stored shared match in the current Monday-to-Sunday week.
 
 Clash notifications use Riot's EUW `clash-v1` schedule and the existing `RIOT_API_KEY` secret.
+
+Live-game notifications use Riot Spectator-V5. Run `db_migrations/add-live-game-cache.sql` and deploy `supabase/functions/live-games/index.ts` as the `live-games` Edge Function. It reuses `RIOT_API_KEY` and `LOBBY_INVITE_TOKEN`, caches checks for 75 seconds, and exposes only the registered players currently in a game.

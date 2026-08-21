@@ -20,6 +20,7 @@ let selectedDay = (new Date().getDay()+6)%7;
 let mancoExpanded = loadMancoExpanded();
 let selectedMatchId = null;
 let renderedMatchSignature = "";
+let liveGamePlayers = [];
 
 const inviteView = $("#invite-view");
 const lobbyView = $("#lobby-view");
@@ -104,7 +105,7 @@ yesButton.addEventListener("click", async () => {
   saveLoginCookie(submittedGameName,submittedTag,currentInviteCode);
   sessionStorage.setItem("salelol-name",currentName);
   if(!currentPlayer()) state.players.push({name:currentName,slots:[],joinedAt:Date.now()});
-  persist();inviteView.classList.add("hidden");lobbyView.classList.remove("hidden");syncTabRoute();render();
+  persist();inviteView.classList.add("hidden");lobbyView.classList.remove("hidden");syncTabRoute();render();loadLiveGames().catch(console.error);
   const profileResult=await Promise.resolve(remoteStore.fetchRiotProfile(submittedGameName,submittedTag,currentInviteCode)).then(value=>({status:"fulfilled",value}),reason=>({status:"rejected",reason}));
   if(profileResult.status==="fulfilled"){
     applyProfile(currentPlayer(),profileResult.value);
@@ -263,11 +264,23 @@ async function loadClashSchedule(){
   notice.innerHTML=`<span>⚔</span><div><strong>Próximo Clash${schedule.name?`: ${escapeHtml(schedule.name)}`:""}</strong><small>${escapeHtml(starts)} · horario de Ámsterdam</small></div>`;
   notice.classList.remove("hidden");
 }
+function liveGameElapsed(startTime){const start=Number(startTime);if(!start)return "En curso";const minutes=Math.max(0,Math.floor((Date.now()-start)/60000));return minutes>=60?`${Math.floor(minutes/60)} h ${String(minutes%60).padStart(2,"0")} min`:`${minutes} min`;}
+function renderLiveGames(){
+  const popup=$("#live-game-popup");
+  if(!liveGamePlayers.length||lobbyView.classList.contains("hidden")){popup.classList.add("hidden");return;}
+  $("#live-game-count").textContent=`${liveGamePlayers.length} invocador${liveGamePlayers.length===1?"":"es"} jugando`;
+  $("#live-game-players").innerHTML=liveGamePlayers.map(player=>{const icon=player.championIconUrl?`<img src="${escapeHtml(player.championIconUrl)}" alt="${escapeHtml(player.championName||"")}" />`:`<span>${escapeHtml((player.championName||"?")[0])}</span>`;const queue=matchQueueLabel(player.queueId);return `<div class="live-game-player"><div class="live-champion">${icon}</div><div><strong>${escapeHtml(compactRiotId(player.riotId))}</strong><small>${escapeHtml(player.championName||"Campeón")}${queue?` · ${escapeHtml(queue)}`:""}</small></div><time>${liveGameElapsed(player.gameStartTime)}</time></div>`;}).join("");
+  popup.classList.remove("hidden");
+}
+async function loadLiveGames(){if(!currentInviteCode||document.hidden)return;const result=await remoteStore.fetchLiveGames(currentInviteCode);liveGamePlayers=Array.isArray(result?.players)?result.players:[];renderLiveGames();}
 function applyProfile(player,profile){if(!player||!profile)return;player.profileIconUrl=profile.profileIconUrl;player.rankTier=profile.rankTier;player.rankDisplay=profile.rankDisplay;player.recentGames=profile.recentGames||[];player.recentMatchSummaries=profile.recentMatchSummaries||[];persist();}
 async function pollForRiotProfile(name,maxAttempts=10){for(let attempt=0;attempt<maxAttempts;attempt++){await refreshRemote();const player=state.players.find(item=>item.name.toLowerCase()===name.toLowerCase());if(player&&(player.profileIconUrl||player.rankTier||(player.recentGames||[]).length))return true;await new Promise(resolve=>setTimeout(resolve,1200));}return false;}
 async function refreshRemote(){const remote=await remoteStore.load();if(!remote)return;Object.assign(state,remote);localStorage.setItem(storeKey,JSON.stringify(state));render();}
 window.addEventListener("storage",event=>{if(event.key===storeKey&&event.newValue){Object.assign(state,JSON.parse(event.newValue));render();}});
 if(remoteStore.enabled){refreshRemote().catch(console.error);setInterval(()=>refreshRemote().catch(console.error),5000);}
+setInterval(()=>loadLiveGames().catch(console.error),60000);
+setInterval(renderLiveGames,30000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)loadLiveGames().catch(console.error);});
 validateRiotId();
 syncTabRoute();
 renderMancoCollapse();
