@@ -9,7 +9,7 @@ const ownerTokensKey = "salelol-owner-tokens";
 const loginCookieKey = "salelol-login-v1";
 const loginCookieMaxAge = 14*24*60*60;
 const mancoExpandedKey = "salelol-manco-expanded";
-const defaultTabRoute = "partidas-recientes";
+const defaultTabRoute = "lobby";
 const $ = selector => document.querySelector(selector);
 const state = loadState();
 let currentName = "";
