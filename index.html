@@ -89,7 +89,15 @@
         </div>
 
         <div id="lobby-tab" class="tab-panel hidden" role="tabpanel">
-          <div class="lobby-grid">
+          <section id="live-game-stage" class="panel section-card live-game-stage hidden" aria-live="polite">
+            <header class="live-stage-header">
+              <div><span class="live-stage-pulse" aria-hidden="true"></span><span class="step">EN VIVO</span><h2>Los mancos están jugando</h2></div>
+              <strong id="live-stage-time">En curso</strong>
+            </header>
+            <div id="live-stage-players" class="live-stage-players"></div>
+            <p id="live-stage-note" class="live-stage-note"></p>
+          </section>
+          <div id="lobby-default-content" class="lobby-grid">
             <section class="panel section-card">
               <div class="section-heading"><div><span class="step">01</span><h2>Invocadores</h2></div></div>
               <div id="players-list" class="players-list"></div>

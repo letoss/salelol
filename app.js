@@ -21,6 +21,10 @@ let mancoExpanded = loadMancoExpanded();
 let selectedMatchId = null;
 let renderedMatchSignature = "";
 let liveGamePlayers = [];
+const liveStatSnapshots = new Map();
+const liveActionMessages = new Map();
+const killMessages = ["de pedo", "como carreo papá", "ahh izi"];
+const deathMessages = ["se murio el pete", "cuando vemos que no es ninguna novedad", "report"];
 
 const inviteView = $("#invite-view");
 const lobbyView = $("#lobby-view");
@@ -136,6 +140,7 @@ function syncTabRoute(){
   document.querySelectorAll(".app-tab").forEach(tab=>{const active=tab===button;tab.classList.toggle("active",active);tab.setAttribute("aria-selected",String(active));tab.tabIndex=active?0:-1;});
   document.querySelectorAll(".tab-panel").forEach(panel=>panel.classList.toggle("hidden",panel.id!==button.dataset.tab));
   document.body.classList.toggle("games-tab-active",button.dataset.tab==="games-tab"&&!lobbyView.classList.contains("hidden"));
+  renderLiveGames();
   if(!requestedRoute||route!==button.dataset.route)history.replaceState(null,"",`${location.pathname}${location.search}#/${button.dataset.route}`);
 }
 function renderMancoCollapse(){const toggle=$("#manco-toggle"),content=$("#manco-content"),card=$("#manco-card");toggle.setAttribute("aria-expanded",String(mancoExpanded));content.classList.toggle("hidden",!mancoExpanded);card.classList.toggle("is-collapsed",!mancoExpanded);}
@@ -314,14 +319,50 @@ async function loadClashSchedule(){
   notice.classList.remove("hidden");
 }
 function liveGameElapsed(startTime){const start=Number(startTime);if(!start)return "En curso";const minutes=Math.max(0,Math.floor((Date.now()-start)/60000));return minutes>=60?`${Math.floor(minutes/60)} h ${String(minutes%60).padStart(2,"0")} min`:`${minutes} min`;}
+function livePlayerKey(player){return `${String(player.gameStartTime||"")}:${String(player.riotId||"").toLocaleLowerCase()}`;}
+function captureLiveActions(players){
+  const activeKeys=new Set();
+  players.forEach(player=>{
+    if(!player.liveStats)return;
+    const key=livePlayerKey(player),kills=Number(player.liveStats.kills)||0,deaths=Number(player.liveStats.deaths)||0;
+    activeKeys.add(key);
+    const previous=liveStatSnapshots.get(key);
+    if(previous){
+      const messages=[];
+      if(kills>previous.kills)messages.push({kind:"kill",text:killMessages[Math.floor(Math.random()*killMessages.length)]});
+      if(deaths>previous.deaths)messages.push({kind:"death",text:deathMessages[Math.floor(Math.random()*deathMessages.length)]});
+      if(messages.length){liveActionMessages.set(key,{messages,expiresAt:Date.now()+14_000});setTimeout(renderLiveGames,14_100);}
+    }
+    liveStatSnapshots.set(key,{kills,deaths});
+  });
+  [...liveStatSnapshots.keys()].filter(key=>!activeKeys.has(key)).forEach(key=>{liveStatSnapshots.delete(key);liveActionMessages.delete(key);});
+}
+function liveActionHtml(player){const action=liveActionMessages.get(livePlayerKey(player));if(!action||action.expiresAt<=Date.now()){if(action)liveActionMessages.delete(livePlayerKey(player));return "";}return `<div class="live-action-messages">${action.messages.map(message=>`<span class="${message.kind}">${escapeHtml(message.text)}</span>`).join("")}</div>`;}
+function livePlayerCard(player,compact=false){
+  const icon=player.championIconUrl?`<img src="${escapeHtml(player.championIconUrl)}" alt="${escapeHtml(player.championName||"")}" />`:`<span>${escapeHtml((player.championName||"?")[0])}</span>`;
+  const queue=matchQueueLabel(player.queueId),live=player.liveStats;
+  if(compact){const detail=live?`${Number(live.kills)||0}/${Number(live.deaths)||0}/${Number(live.assists)||0} KDA · ${Number(live.creepScore)||0} CS`:`${escapeHtml(player.championName||"Campeón")}${queue?` · ${escapeHtml(queue)}`:""}`;return `<div class="live-game-player ${live?"has-live-stats":""}"><div class="live-champion">${icon}</div><div><strong>${escapeHtml(compactRiotId(player.riotId))}${live?`<b class="desktop-live-badge">LIVE</b>`:""}</strong><small>${detail}</small></div><time>${liveGameElapsed(player.gameStartTime)}</time></div>`;}
+  return `<article class="live-stage-player ${live?"has-live-stats":"no-live-stats"}"><div class="live-stage-champion">${icon}</div><div class="live-stage-identity"><span>${escapeHtml(player.championName||"Campeón")}</span><strong>${escapeHtml(compactRiotId(player.riotId))}</strong>${liveActionHtml(player)}</div>${live?`<div class="live-stage-kda"><span>K / D / A</span><strong><b>${Number(live.kills)||0}</b> / <b>${Number(live.deaths)||0}</b> / <b>${Number(live.assists)||0}</b></strong></div><div class="live-stage-stat"><span>CS</span><strong>${Number(live.creepScore)||0}</strong></div><div class="live-stage-stat"><span>VISIÓN</span><strong>${Math.round(Number(live.wardScore)||0)}</strong></div><b class="desktop-live-badge">LIVE</b>`:`<div class="live-stage-missing"><strong>Sin datos live</strong><span>Necesita SaleLoL Companion</span></div>`}</article>`;
+}
 function renderLiveGames(){
   const popup=$("#live-game-popup");
-  if(!liveGamePlayers.length||lobbyView.classList.contains("hidden")){popup.classList.add("hidden");return;}
+  const stage=$("#live-game-stage"),defaultContent=$("#lobby-default-content");
+  const lobbyTabActive=document.querySelector('[data-tab="lobby-tab"]')?.classList.contains("active")&&!lobbyView.classList.contains("hidden");
+  const hasGame=liveGamePlayers.length>0;
+  stage.classList.toggle("hidden",!hasGame);
+  defaultContent.classList.toggle("hidden",hasGame);
+  if(hasGame){
+    const livePlayers=liveGamePlayers.filter(player=>player.liveStats),withoutClient=liveGamePlayers.length-livePlayers.length;
+    $("#live-stage-players").innerHTML=liveGamePlayers.map(player=>livePlayerCard(player)).join("");
+    $("#live-stage-time").textContent=liveGameElapsed(liveGamePlayers[0]?.gameStartTime);
+    $("#live-stage-note").textContent=withoutClient?`${withoutClient} jugador${withoutClient===1?"":"es"} detectado${withoutClient===1?"":"s"} sin datos del companion.`:`Stats en vivo de ${livePlayers.length} manco${livePlayers.length===1?"":"s"}.`;
+  }
+  if(!hasGame||lobbyTabActive||lobbyView.classList.contains("hidden")){popup.classList.add("hidden");return;}
   $("#live-game-count").textContent=`${liveGamePlayers.length} manco${liveGamePlayers.length===1?"":"s"} manqueando`;
-  $("#live-game-players").innerHTML=liveGamePlayers.map(player=>{const icon=player.championIconUrl?`<img src="${escapeHtml(player.championIconUrl)}" alt="${escapeHtml(player.championName||"")}" />`:`<span>${escapeHtml((player.championName||"?")[0])}</span>`;const queue=matchQueueLabel(player.queueId);const live=player.liveStats;const detail=live?`${Number(live.kills)||0}/${Number(live.deaths)||0}/${Number(live.assists)||0} KDA · ${Number(live.creepScore)||0} CS`:`${escapeHtml(player.championName||"Campeón")}${queue?` · ${escapeHtml(queue)}`:""}`;return `<div class="live-game-player ${live?"has-live-stats":""}"><div class="live-champion">${icon}</div><div><strong>${escapeHtml(compactRiotId(player.riotId))}${live?`<b class="desktop-live-badge">LIVE</b>`:""}</strong><small>${detail}</small></div><time>${liveGameElapsed(player.gameStartTime)}</time></div>`;}).join("");
+  $("#live-game-players").innerHTML=liveGamePlayers.map(player=>livePlayerCard(player,true)).join("");
   popup.classList.remove("hidden");
 }
-async function loadLiveGames(){if(!currentInviteCode||document.hidden)return;const result=await remoteStore.fetchLiveGames(currentInviteCode);liveGamePlayers=Array.isArray(result?.players)?result.players:[];renderLiveGames();}
+async function loadLiveGames(){if(!currentInviteCode||document.hidden)return;const result=await remoteStore.fetchLiveGames(currentInviteCode);const players=Array.isArray(result?.players)?result.players:[];captureLiveActions(players);liveGamePlayers=players;renderLiveGames();}
 function applyProfile(player,profile){if(!player||!profile)return;player.profileIconUrl=profile.profileIconUrl;player.rankTier=profile.rankTier;player.rankDisplay=profile.rankDisplay;player.recentGames=profile.recentGames||[];player.recentMatchSummaries=profile.recentMatchSummaries||[];persist();}
 async function pollForRiotProfile(name,maxAttempts=10){for(let attempt=0;attempt<maxAttempts;attempt++){await refreshRemote();const player=state.players.find(item=>item.name.toLowerCase()===name.toLowerCase());if(player&&(player.profileIconUrl||player.rankTier||(player.recentGames||[]).length))return true;await new Promise(resolve=>setTimeout(resolve,1200));}return false;}
 async function refreshRemote(){const remote=await remoteStore.load();if(!remote)return;Object.assign(state,remote);localStorage.setItem(storeKey,JSON.stringify(state));render();}
