@@ -268,7 +268,7 @@ function liveGameElapsed(startTime){const start=Number(startTime);if(!start)retu
 function renderLiveGames(){
   const popup=$("#live-game-popup");
   if(!liveGamePlayers.length||lobbyView.classList.contains("hidden")){popup.classList.add("hidden");return;}
-  $("#live-game-count").textContent=`${liveGamePlayers.length} invocador${liveGamePlayers.length===1?"":"es"} jugando`;
+  $("#live-game-count").textContent=`${liveGamePlayers.length} manco${liveGamePlayers.length===1?"":"s"} manqueando`;
   $("#live-game-players").innerHTML=liveGamePlayers.map(player=>{const icon=player.championIconUrl?`<img src="${escapeHtml(player.championIconUrl)}" alt="${escapeHtml(player.championName||"")}" />`:`<span>${escapeHtml((player.championName||"?")[0])}</span>`;const queue=matchQueueLabel(player.queueId);return `<div class="live-game-player"><div class="live-champion">${icon}</div><div><strong>${escapeHtml(compactRiotId(player.riotId))}</strong><small>${escapeHtml(player.championName||"Campeón")}${queue?` · ${escapeHtml(queue)}`:""}</small></div><time>${liveGameElapsed(player.gameStartTime)}</time></div>`;}).join("");
   popup.classList.remove("hidden");
 }
