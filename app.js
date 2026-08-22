@@ -9,7 +9,7 @@ const ownerTokensKey = "salelol-owner-tokens";
 const loginCookieKey = "salelol-login-v1";
 const loginCookieMaxAge = 14*24*60*60;
 const mancoExpandedKey = "salelol-manco-expanded";
-const defaultTabRoute = "lobby";
+const defaultTabRoute = "live";
 const $ = selector => document.querySelector(selector);
 const state = loadState();
 let currentName = "";
@@ -357,18 +357,18 @@ function reportPlayerCard(player,awards){
   return `<article class="report-player"><header><i style="--player-color:${escapeHtml(player.color)}"></i><div><strong>${escapeHtml(compactRiotId(player.riotId))}</strong><small>${escapeHtml(player.championName||"")}</small></div><b>${Number(player.kills)||0}/${Number(player.deaths)||0}/${Number(player.assists)||0}</b></header><div class="report-stats"><span><small>CS/MIN</small><b>${Number(player.csPerMinute||0).toFixed(1)}</b></span><span><small>CS 10 / 15</small><b>${Number(player.csAt10)||0} / ${Number(player.csAt15)||0}</b></span><span><small>VISIÓN/MIN</small><b>${Number(player.visionPerMinute||0).toFixed(2)}</b></span><span title="${escapeHtml(deadTimeLabel(Number(player.timeDeadSeconds)||0))}"><small>TIEMPO MUERTO</small><b>${dead}</b></span><span><small>OBJETIVOS</small><b>${Number(player.objectiveParticipation?.percent)||0}%</b></span><span><small>ROAMING</small><b>${Number(player.roamingScore)||0}</b></span></div><div class="report-badges">${badges.map(badge=>`<em>${escapeHtml(badge)}</em>`).join("")}</div>${awards?.gray===player.riotId?`<p>${escapeHtml(deadTimeLabel(Number(player.timeDeadSeconds)||0))}</p>`:""}</article>`;
 }
 function renderPostGameReport(report){
-  const manco=compactRiotId(report.awards?.manco);
+  const manco=compactRiotId(report.awards?.manco||report.players?.[0]?.riotId);
   return `<div class="post-game-report"><header><div><span>REPORTE FINAL</span><h2>${report.result==="loss"?`Report ${escapeHtml(manco)}`:"Terminó la manqueada"}</h2></div><small>${Math.max(1,Math.round(Number(report.durationSeconds||0)/60))} min</small></header><div class="report-layout">${reportMap(report)}<div class="report-players">${(report.players||[]).map(player=>reportPlayerCard(player,report.awards)).join("")}</div></div></div>`;
 }
 function renderLiveGames(){
   const popup=$("#live-game-popup");
-  const stage=$("#live-game-stage"),defaultContent=$("#lobby-default-content");
+  const stage=$("#live-game-stage"),emptyState=$("#live-empty-state");
   const outcome=$("#live-game-outcome"),stageHeader=stage.querySelector(".live-stage-header"),stagePlayers=$("#live-stage-players"),stageNote=$("#live-stage-note");
-  const lobbyTabActive=document.querySelector('[data-tab="lobby-tab"]')?.classList.contains("active")&&!lobbyView.classList.contains("hidden");
+  const liveTabActive=document.querySelector('[data-tab="live-tab"]')?.classList.contains("active")&&!lobbyView.classList.contains("hidden");
   const hasGame=liveGamePlayers.length>0;
   const hasOutcome=Boolean(liveGameOutcome);
   stage.classList.toggle("hidden",!hasGame&&!hasOutcome);
-  defaultContent.classList.toggle("hidden",hasGame||hasOutcome);
+  emptyState.classList.toggle("hidden",hasGame||hasOutcome);
   outcome.classList.toggle("hidden",!hasOutcome);
   stageHeader.classList.toggle("hidden",hasOutcome);
   stagePlayers.classList.toggle("hidden",hasOutcome);
@@ -382,7 +382,7 @@ function renderLiveGames(){
     $("#live-stage-time").textContent=liveGameElapsed(liveGamePlayers[0]?.gameStartTime);
     $("#live-stage-note").textContent=withoutClient?`${withoutClient} jugador${withoutClient===1?"":"es"} detectado${withoutClient===1?"":"s"} sin datos del companion.`:`Stats en vivo de ${livePlayers.length} manco${livePlayers.length===1?"":"s"}.`;
   }
-  if(!hasGame||hasOutcome||lobbyTabActive||lobbyView.classList.contains("hidden")){popup.classList.add("hidden");return;}
+  if(!hasGame||hasOutcome||liveTabActive||lobbyView.classList.contains("hidden")){popup.classList.add("hidden");return;}
   $("#live-game-count").textContent=`${liveGamePlayers.length} manco${liveGamePlayers.length===1?"":"s"} manqueando`;
   $("#live-game-players").innerHTML=liveGamePlayers.map(player=>livePlayerCard(player,true)).join("");
   popup.classList.remove("hidden");

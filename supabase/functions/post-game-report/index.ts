@@ -60,14 +60,17 @@ Deno.serve(async request=>{
       const performance=round((n(p.kills)*2+n(p.assists))-(n(p.deaths)*2.2)-(dead/60*.35)+(csMin*.45)+(visionMin*2)+(objective.percent*.025)+(damageShare*.06),2);
       return {riotId:registered.get(String(p.puuid)),championName:p.championName,color:colors[index%colors.length],win:Boolean(p.win),kills:n(p.kills),deaths:n(p.deaths),assists:n(p.assists),csPerMinute:round(csMin),csAt10:n(at10.minionsKilled)+n(at10.jungleMinionsKilled),csAt15:n(at15.minionsKilled)+n(at15.jungleMinionsKilled),visionPerMinute:round(visionMin,2),timeDeadSeconds:dead,objectiveParticipation:objective,killParticipation:round(kp,0),damageShare:round(damageShare,1),roamingScore:roaming,positions,performance};
     });
-    if(players.length<2)return json({error:"Not a shared SaleLoL match"},409);
+    if(!players.length)return json({error:"Registered player missing from match"},409);
     const lowest=[...players].sort((a,b)=>a.performance-b.performance)[0];
     const gray=[...players].sort((a,b)=>b.timeDeadSeconds-a.timeDeadSeconds)[0];
     const afk=[...players].sort((a,b)=>(b.csPerMinute-b.killParticipation/18-b.objectiveParticipation.percent/25)-(a.csPerMinute-a.killParticipation/18-a.objectiveParticipation.percent/25))[0];
     const carry=[...players].sort((a,b)=>(b.damageShare+b.killParticipation*.35)-(a.damageShare+a.killParticipation*.35))[0];
-    const payload={matchId,gameStart:new Date(n(match.info?.gameStartTimestamp)).toISOString(),durationSeconds:duration,result:players[0]?.win?"win":"loss",players,awards:{manco:lowest?.riotId,gray:gray?.riotId,afkFarming:afk?.riotId,carry:carry?.riotId}};
+    const group=players.length>1;
+    const payload={matchId,gameStart:new Date(n(match.info?.gameStartTimestamp)).toISOString(),durationSeconds:duration,result:players[0]?.win?"win":"loss",players,awards:{manco:group?lowest?.riotId:null,gray:gray?.riotId,afkFarming:group?afk?.riotId:null,carry:group?carry?.riotId:null}};
     const {error}=await store.from("post_game_reports").upsert({game_id:matchId,payload,created_at:new Date().toISOString()},{onConflict:"game_id"});
     if(error)throw error;
+    const {error:cleanupError}=await store.from("post_game_reports").delete().neq("game_id",matchId);
+    if(cleanupError)console.error("Unable to remove older reports",cleanupError);
     return json({ok:true,report:payload});
   }catch(error){console.error(error);return json({error:"Post-game report is not ready yet"},409);}
 });

@@ -123,7 +123,7 @@ The default project URL is `https://YOUR_GITHUB_USERNAME.github.io/YOUR_REPOSITO
 4. Join and confirm that the Riot profile, rank and recent matches load.
 5. Repeat with another registered player to enable shared-match reports and group awards.
 
-Post-game reports require at least two registered SaleLoL players in the same match. Only one needs to run the companion to trigger generation.
+The latest companion-triggered match is stored even when only one registered SaleLoL player participated. Group awards become available when multiple registered players were in the same match. The Live tab keeps the finished report visible until a newer game starts.
 
 ## Windows companion
 

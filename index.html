@@ -62,8 +62,9 @@
         </header>
 
         <nav id="app-tabs" class="app-tabs" role="tablist" aria-label="Secciones del lobby">
+          <button class="app-tab active" type="button" role="tab" data-tab="live-tab" data-route="live" aria-controls="live-tab" aria-selected="true">LIVE</button>
           <button class="app-tab" type="button" role="tab" data-tab="lobby-tab" data-route="lobby" aria-controls="lobby-tab" aria-selected="false">LOBBY</button>
-          <button class="app-tab active" type="button" role="tab" data-tab="games-tab" data-route="partidas-recientes" aria-controls="games-tab" aria-selected="true">PARTIDAS RECIENTES</button>
+          <button class="app-tab" type="button" role="tab" data-tab="games-tab" data-route="partidas-recientes" aria-controls="games-tab" aria-selected="false">PARTIDAS RECIENTES</button>
           <button class="app-tab" type="button" role="tab" data-tab="calendar-tab" data-route="calendario" aria-controls="calendar-tab" aria-selected="false">CALENDARIO</button>
           <button class="app-tab" type="button" role="tab" data-tab="availability-tab" data-route="mi-disponibilidad" aria-controls="availability-tab" aria-selected="false">MI DISPONIBILIDAD</button>
         </nav>
@@ -88,7 +89,7 @@
           </section>
         </div>
 
-        <div id="lobby-tab" class="tab-panel hidden" role="tabpanel">
+        <div id="live-tab" class="tab-panel" role="tabpanel">
           <section id="live-game-stage" class="panel section-card live-game-stage hidden" aria-live="polite">
             <header class="live-stage-header">
               <div><span class="live-stage-pulse" aria-hidden="true"></span><span class="step">EN VIVO</span><h2>Los mancos están jugando</h2></div>
@@ -98,7 +99,15 @@
             <p id="live-stage-note" class="live-stage-note"></p>
             <div id="live-game-outcome" class="live-game-outcome hidden"></div>
           </section>
-          <div id="lobby-default-content" class="lobby-grid">
+          <section id="live-empty-state" class="panel section-card live-empty-state">
+            <span class="step">LIVE</span>
+            <h2>No hay ninguna manqueada en curso</h2>
+            <p>La próxima partida aparecerá acá. Cuando termine, sus estadísticas quedarán visibles hasta que empiece una nueva.</p>
+          </section>
+        </div>
+
+        <div id="lobby-tab" class="tab-panel hidden" role="tabpanel">
+          <div class="lobby-grid">
             <section class="panel section-card">
               <div class="section-heading"><div><span class="step">01</span><h2>Invocadores</h2></div></div>
               <div id="players-list" class="players-list"></div>
