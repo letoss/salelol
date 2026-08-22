@@ -22,7 +22,6 @@ let selectedMatchId = null;
 let renderedMatchSignature = "";
 let liveGamePlayers = [];
 let liveGameOutcome = null;
-let liveOutcomeTimer = null;
 const liveStatSnapshots = new Map();
 const liveActionMessages = new Map();
 const killMessages = ["de pedo", "como carreo papá", "ahh izi"];
@@ -273,7 +272,7 @@ function gameMessage(game){
   const ours=(game.teams||[]).flatMap(team=>team.players||[]).filter(player=>player.isOurBoy);
   const won=ours.some(player=>player.win);
   if(!won){
-    const worst=[...ours].sort((a,b)=>((a.kills+a.assists)/Math.max(1,a.deaths))-((b.kills+b.assists)/Math.max(1,b.deaths))||b.deaths-a.deaths)[0];
+    const worst=[...ours].sort((a,b)=>Number(a.performance??((a.kills+a.assists)/Math.max(1,a.deaths)))-Number(b.performance??((b.kills+b.assists)/Math.max(1,b.deaths)))||b.deaths-a.deaths)[0];
     return `Report ${compactRiotId(worst?.riotId)}`;
   }
   const best=[...ours].sort((a,b)=>((b.kills+b.assists)/Math.max(1,b.deaths))-((a.kills+a.assists)/Math.max(1,a.deaths)))[0];
@@ -346,13 +345,28 @@ function livePlayerCard(player,compact=false){
   if(compact){const detail=live?`${Number(live.kills)||0}/${Number(live.deaths)||0}/${Number(live.assists)||0} KDA · ${Number(live.creepScore)||0} CS`:`${escapeHtml(player.championName||"Campeón")}${queue?` · ${escapeHtml(queue)}`:""}`;return `<div class="live-game-player ${live?"has-live-stats":""}"><div class="live-champion">${icon}</div><div><strong>${escapeHtml(compactRiotId(player.riotId))}${live?`<b class="desktop-live-badge">LIVE</b>`:""}</strong><small>${detail}</small></div><time>${liveGameElapsed(player.gameStartTime)}</time></div>`;}
   return `<article class="live-stage-player ${live?"has-live-stats":"no-live-stats"}"><div class="live-stage-champion">${icon}</div><div class="live-stage-identity"><span>${escapeHtml(player.championName||"Campeón")}</span><strong>${escapeHtml(compactRiotId(player.riotId))}</strong>${liveActionHtml(player)}</div>${live?`<div class="live-stage-kda"><span>K / D / A</span><strong><b>${Number(live.kills)||0}</b> / <b>${Number(live.deaths)||0}</b> / <b>${Number(live.assists)||0}</b></strong></div><div class="live-stage-stat"><span>CS</span><strong>${Number(live.creepScore)||0}</strong></div><div class="live-stage-stat"><span>VISIÓN</span><strong>${Math.round(Number(live.wardScore)||0)}</strong></div><b class="desktop-live-badge">LIVE</b>`:`<div class="live-stage-missing"><strong>Sin datos live</strong><span>Necesita SaleLoL Companion</span></div>`}</article>`;
 }
+function deadTimeLabel(seconds){if(seconds>=360)return "Se mudó a la pantalla gris";if(seconds>=240)return "Más muerto que vivo";if(seconds>=120)return "Le gustó bastante la pantalla gris";if(seconds>=60)return "Un descansito en base";return "Casi siempre disponible";}
+function reportMap(report){
+  const paths=(report.players||[]).map(player=>{const color=escapeHtml(player.color),samples=(player.positions||[]).map(point=>({x:Math.max(0,Math.min(15000,Number(point.x)))/100,y:150-Math.max(0,Math.min(15000,Number(point.y)))/100})),points=samples.map(point=>`${point.x},${point.y}`).join(" "),heat=samples.map(point=>`<circle class="heat-point" cx="${point.x}" cy="${point.y}" r="7" style="--player-color:${color}"/>`).join("");return points?`${heat}<polyline points="${points}" style="--player-color:${color}"/><circle cx="${samples.at(-1).x}" cy="${samples.at(-1).y}" r="2.5" style="--player-color:${color}"/>`:"";}).join("");
+  const legend=(report.players||[]).map(player=>`<span><i style="--player-color:${escapeHtml(player.color)}"></i>${escapeHtml(compactRiotId(player.riotId))}</span>`).join("");
+  return `<div class="report-map"><svg viewBox="0 0 150 150" role="img" aria-label="Recorrido aproximado de los jugadores"><defs><linearGradient id="rift" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#153b38"/><stop offset=".5" stop-color="#142b31"/><stop offset="1" stop-color="#4a282c"/></linearGradient></defs><rect width="150" height="150" fill="url(#rift)"/><path class="map-river" d="M-5 112 C35 110 40 82 72 77 S112 47 155 39"/><path class="map-lane" d="M12 138 138 12M10 140V12H140M10 140H138V12"/>${paths}</svg><div class="report-map-legend">${legend}</div><small>Posiciones aproximadas por minuto</small></div>`;
+}
+function reportPlayerCard(player,awards){
+  const badges=[awards?.manco===player.riotId?"El verdadero manco":"",awards?.afkFarming===player.riotId?"AFK farming":"",awards?.gray===player.riotId?"Me gusta la pantalla gris":"",awards?.carry===player.riotId?"Carrito oficial":""].filter(Boolean);
+  const dead=`${Math.floor(Number(player.timeDeadSeconds||0)/60)}:${String(Number(player.timeDeadSeconds||0)%60).padStart(2,"0")}`;
+  return `<article class="report-player"><header><i style="--player-color:${escapeHtml(player.color)}"></i><div><strong>${escapeHtml(compactRiotId(player.riotId))}</strong><small>${escapeHtml(player.championName||"")}</small></div><b>${Number(player.kills)||0}/${Number(player.deaths)||0}/${Number(player.assists)||0}</b></header><div class="report-stats"><span><small>CS/MIN</small><b>${Number(player.csPerMinute||0).toFixed(1)}</b></span><span><small>CS 10 / 15</small><b>${Number(player.csAt10)||0} / ${Number(player.csAt15)||0}</b></span><span><small>VISIÓN/MIN</small><b>${Number(player.visionPerMinute||0).toFixed(2)}</b></span><span title="${escapeHtml(deadTimeLabel(Number(player.timeDeadSeconds)||0))}"><small>TIEMPO MUERTO</small><b>${dead}</b></span><span><small>OBJETIVOS</small><b>${Number(player.objectiveParticipation?.percent)||0}%</b></span><span><small>ROAMING</small><b>${Number(player.roamingScore)||0}</b></span></div><div class="report-badges">${badges.map(badge=>`<em>${escapeHtml(badge)}</em>`).join("")}</div>${awards?.gray===player.riotId?`<p>${escapeHtml(deadTimeLabel(Number(player.timeDeadSeconds)||0))}</p>`:""}</article>`;
+}
+function renderPostGameReport(report){
+  const manco=compactRiotId(report.awards?.manco);
+  return `<div class="post-game-report"><header><div><span>REPORTE FINAL</span><h2>${report.result==="loss"?`Report ${escapeHtml(manco)}`:"Terminó la manqueada"}</h2></div><small>${Math.max(1,Math.round(Number(report.durationSeconds||0)/60))} min</small></header><div class="report-layout">${reportMap(report)}<div class="report-players">${(report.players||[]).map(player=>reportPlayerCard(player,report.awards)).join("")}</div></div></div>`;
+}
 function renderLiveGames(){
   const popup=$("#live-game-popup");
   const stage=$("#live-game-stage"),defaultContent=$("#lobby-default-content");
   const outcome=$("#live-game-outcome"),stageHeader=stage.querySelector(".live-stage-header"),stagePlayers=$("#live-stage-players"),stageNote=$("#live-stage-note");
   const lobbyTabActive=document.querySelector('[data-tab="lobby-tab"]')?.classList.contains("active")&&!lobbyView.classList.contains("hidden");
   const hasGame=liveGamePlayers.length>0;
-  const hasOutcome=liveGameOutcome&&Date.now()-new Date(liveGameOutcome.updatedAt).getTime()<120_000;
+  const hasOutcome=Boolean(liveGameOutcome);
   stage.classList.toggle("hidden",!hasGame&&!hasOutcome);
   defaultContent.classList.toggle("hidden",hasGame||hasOutcome);
   outcome.classList.toggle("hidden",!hasOutcome);
@@ -360,9 +374,8 @@ function renderLiveGames(){
   stagePlayers.classList.toggle("hidden",hasOutcome);
   stageNote.classList.toggle("hidden",hasOutcome);
   if(hasOutcome){
-    const won=liveGameOutcome.result==="win",label=won?"VICTORIA":"DERROTA";
-    outcome.className=`live-game-outcome ${won?"victory":"defeat"}`;
-    outcome.innerHTML=`<div class="outcome-rays" aria-hidden="true"></div><svg viewBox="0 0 160 130" aria-hidden="true"><path class="outcome-wing" d="M80 8 105 34 144 25 124 63 148 91 106 94 80 122 54 94 12 91 36 63 16 25 55 34Z"/><path class="outcome-core" d="m80 25 25 38-25 42-25-42Z"/><path class="outcome-cut" d="m80 42 11 21-11 22-11-22Z"/></svg><span>FIN DE LA PARTIDA</span><strong>${label}</strong><small>${escapeHtml(compactRiotId(liveGameOutcome.riotId))} · ${Number(liveGameOutcome.kills)||0}/${Number(liveGameOutcome.deaths)||0}/${Number(liveGameOutcome.assists)||0}</small>`;
+    outcome.className="post-game-report-shell";
+    outcome.innerHTML=renderPostGameReport(liveGameOutcome);
   }else if(hasGame){
     const livePlayers=liveGamePlayers.filter(player=>player.liveStats),withoutClient=liveGamePlayers.length-livePlayers.length;
     $("#live-stage-players").innerHTML=liveGamePlayers.map(player=>livePlayerCard(player)).join("");
@@ -374,7 +387,7 @@ function renderLiveGames(){
   $("#live-game-players").innerHTML=liveGamePlayers.map(player=>livePlayerCard(player,true)).join("");
   popup.classList.remove("hidden");
 }
-async function loadLiveGames(){if(!currentInviteCode||document.hidden)return;const result=await remoteStore.fetchLiveGames(currentInviteCode);const players=Array.isArray(result?.players)?result.players:[];const finished=Array.isArray(result?.finishedGames)?result.finishedGames:[];captureLiveActions(players);liveGamePlayers=players;liveGameOutcome=finished.find(item=>String(item.riotId||"").toLocaleLowerCase()===currentName.toLocaleLowerCase())||finished[0]||null;clearTimeout(liveOutcomeTimer);if(liveGameOutcome){const remaining=120_000-(Date.now()-new Date(liveGameOutcome.updatedAt).getTime());liveOutcomeTimer=setTimeout(()=>{liveGameOutcome=null;renderLiveGames();},Math.max(0,remaining)+50);}renderLiveGames();}
+async function loadLiveGames(){if(!currentInviteCode||document.hidden)return;const result=await remoteStore.fetchLiveGames(currentInviteCode);const players=Array.isArray(result?.players)?result.players:[];captureLiveActions(players);liveGamePlayers=players;liveGameOutcome=players.length?null:(result?.postGameReport||null);renderLiveGames();}
 function applyProfile(player,profile){if(!player||!profile)return;player.profileIconUrl=profile.profileIconUrl;player.rankTier=profile.rankTier;player.rankDisplay=profile.rankDisplay;player.recentGames=profile.recentGames||[];player.recentMatchSummaries=profile.recentMatchSummaries||[];persist();}
 async function pollForRiotProfile(name,maxAttempts=10){for(let attempt=0;attempt<maxAttempts;attempt++){await refreshRemote();const player=state.players.find(item=>item.name.toLowerCase()===name.toLowerCase());if(player&&(player.profileIconUrl||player.rankTier||(player.recentGames||[]).length))return true;await new Promise(resolve=>setTimeout(resolve,1200));}return false;}
 async function refreshRemote(){const remote=await remoteStore.load();if(!remote)return;Object.assign(state,remote);localStorage.setItem(storeKey,JSON.stringify(state));render();}

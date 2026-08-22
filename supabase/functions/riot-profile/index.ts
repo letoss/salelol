@@ -173,6 +173,9 @@ Deno.serve(async (request) => {
         const players = participants.filter((participant: Record<string, unknown>) => participant.teamId === teamId).map((participant: Record<string, unknown>) => {
           const knownRiotId = registeredByPuuid.get(String(participant.puuid));
           const riotId = knownRiotId || [participant.riotIdGameName, participant.riotIdTagline].filter(Boolean).join("#") || participant.summonerName || "Desconocido";
+          const minutes=Math.max(1,Number(match.info?.gameDuration||0)/60);
+          const challenges=(participant.challenges||{}) as Record<string,unknown>;
+          const performance=Number((Number(participant.kills||0)*2+Number(participant.assists||0)-Number(participant.deaths||0)*2.2-Number(participant.totalTimeSpentDead||0)/60*.35+((Number(participant.totalMinionsKilled||0)+Number(participant.neutralMinionsKilled||0))/minutes)*.45+(Number(participant.visionScore||0)/minutes)*2+Number(challenges.teamDamagePercentage||0)*6).toFixed(2));
           return {
             riotId,
             championName: participant.championName,
@@ -180,6 +183,7 @@ Deno.serve(async (request) => {
             kills: participant.kills || 0,
             deaths: participant.deaths || 0,
             assists: participant.assists || 0,
+            performance,
             win: Boolean(participant.win),
             isOurBoy: Boolean(knownRiotId),
           };

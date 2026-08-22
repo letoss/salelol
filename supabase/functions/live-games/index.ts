@@ -17,10 +17,9 @@ async function attachDesktopStats(db:ReturnType<typeof adminClient>,players:Arra
   return players.map(player=>{const live=liveById.get(String(player.riotId||"").toLocaleLowerCase());if(!live)return {...player,desktopLive:false};return {...player,desktopLive:true,championName:live.champion_name||player.championName,liveStats:{kills:live.kills,deaths:live.deaths,assists:live.assists,creepScore:live.creep_score,wardScore:live.ward_score,gameTimeSeconds:live.game_time_seconds,gameMode:live.game_mode,gameResult:live.game_result,updatedAt:live.updated_at}};});
 }
 async function loadFinishedGames(db:ReturnType<typeof adminClient>){
-  const cutoff=new Date(Date.now()-120_000).toISOString();
-  const {data,error}=await db.from("desktop_live_stats").select("riot_id,champion_name,kills,deaths,assists,game_result,updated_at").not("game_result","is",null).gte("updated_at",cutoff).order("updated_at",{ascending:false});
-  if(error){console.error("Unable to load finished live games",error);return [];}
-  return (data||[]).map(item=>({riotId:item.riot_id,championName:item.champion_name,kills:item.kills,deaths:item.deaths,assists:item.assists,result:item.game_result,updatedAt:item.updated_at}));
+  const {data,error}=await db.from("post_game_reports").select("payload,created_at").order("created_at",{ascending:false}).limit(1).maybeSingle();
+  if(error){console.error("Unable to load post-game report",error);return null;}
+  return data?{...data.payload,createdAt:data.created_at}:null;
 }
 
 Deno.serve(async(request)=>{
@@ -36,7 +35,7 @@ Deno.serve(async(request)=>{
     const db=adminClient();
     const {data:cached}=await db.from("live_game_cache").select("players,checked_at").eq("id",1).maybeSingle();
     const cacheAge=cached?Date.now()-new Date(cached.checked_at).getTime():Infinity;
-    if(cached&&cacheAge<CACHE_TTL_MS)return json({players:await attachDesktopStats(db,cached.players||[]),finishedGames:await loadFinishedGames(db),checkedAt:cached.checked_at,cached:true});
+    if(cached&&cacheAge<CACHE_TTL_MS)return json({players:await attachDesktopStats(db,cached.players||[]),postGameReport:await loadFinishedGames(db),checkedAt:cached.checked_at,cached:true});
 
     const {data:lobbyPlayers,error:playersError}=await db.from("players").select("name").eq("game_date",currentWeekStart());
     if(playersError)throw playersError;
@@ -54,7 +53,7 @@ Deno.serve(async(request)=>{
       const response=await fetch(`https://euw1.api.riotgames.com/lol/spectator/v5/active-games/by-summoner/${encodeURIComponent(puuid)}`,{headers:{"X-Riot-Token":riotKey}});
       if(response.status===404){checkedPuuids.add(puuid);continue;}
       if(!response.ok){
-        if(cached&&cacheAge<10*60_000)return json({players:await attachDesktopStats(db,cached.players||[]),finishedGames:await loadFinishedGames(db),checkedAt:cached.checked_at,cached:true,stale:true});
+        if(cached&&cacheAge<10*60_000)return json({players:await attachDesktopStats(db,cached.players||[]),postGameReport:await loadFinishedGames(db),checkedAt:cached.checked_at,cached:true,stale:true});
         return json({error:"Unable to check live games",riotStatus:response.status},response.status===429?429:502);
       }
       const game=await response.json();
@@ -75,6 +74,6 @@ Deno.serve(async(request)=>{
     const checkedAt=new Date().toISOString();
     const {error:cacheError}=await db.from("live_game_cache").upsert({id:1,players,checked_at:checkedAt},{onConflict:"id"});
     if(cacheError)console.error("Unable to cache live games",cacheError);
-    return json({players:await attachDesktopStats(db,players),finishedGames:await loadFinishedGames(db),checkedAt,cached:false});
+    return json({players:await attachDesktopStats(db,players),postGameReport:await loadFinishedGames(db),checkedAt,cached:false});
   }catch(error){console.error(error);return json({error:"Live-game check failed"},500);}
 });

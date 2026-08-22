@@ -30,6 +30,7 @@ Deno.serve(async(request)=>{
     const gameResult=stats.gameResult==null?null:String(stats.gameResult).toLowerCase();
     if(gameResult!==null&&gameResult!=="win"&&gameResult!=="loss")return json({error:"Invalid game result"},400);
     if(!championName||championName.length>40||!integer(stats.kills,0,100)||!integer(stats.deaths,0,100)||!integer(stats.assists,0,200)||!integer(stats.creepScore,0,5000)||!Number.isFinite(stats.wardScore)||Number(stats.wardScore)<0||Number(stats.wardScore)>10000||!integer(stats.gameTimeSeconds,0,86400))return json({error:"Invalid live stats"},400);
+    if(gameResult===null&&Number(stats.gameTimeSeconds)<45){const {error:clearError}=await db.from("post_game_reports").delete().neq("game_id","");if(clearError)console.error("Unable to clear previous report",clearError);}
     const {error}=await db.from("desktop_live_stats").upsert({riot_id:cleanName,champion_name:championName,kills:stats.kills,deaths:stats.deaths,assists:stats.assists,creep_score:stats.creepScore,ward_score:Number(stats.wardScore),game_time_seconds:stats.gameTimeSeconds,game_mode:gameMode,game_result:gameResult,updated_at:new Date().toISOString()},{onConflict:"riot_id"});
     if(error)throw error;
     return json({ok:true,active:true});
