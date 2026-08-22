@@ -1,79 +1,177 @@
-# Sale LoL?
+# SaleLoL
 
-Invitación interactiva para organizar partidas de League of Legends.
+Private League of Legends lobby for coordinating availability, detecting shared matches, showing live companion stats, and generating post-game reports with heatmaps and group awards.
 
-## Ejecutar localmente
+The frontend is a static GitHub Pages site. Supabase provides PostgreSQL, read-only browser access and Edge Functions. Riot's APIs provide profiles, ranks, match history, Clash, live-game detection and post-game timelines. The optional Windows companion reads Riot's local Live Client Data API for the signed-in player.
 
-Abrí `index.html` o serví la carpeta con `python -m http.server 8000`.
+## What you need
 
-## Configurar la lobby compartida
+- A [GitHub account](https://github.com/signup) and a copy of this repository.
+- A [Supabase account](https://supabase.com/dashboard/sign-up) and project.
+- A Riot account and access to the [Riot Developer Portal](https://developer.riotgames.com/).
+- Node.js 22 and the Supabase CLI only if you prefer deploying from a terminal. Everything on the Supabase side can also be configured through its dashboard.
 
-1. Creá un proyecto de Supabase.
-2. Ejecutá `supabase.sql` desde **SQL Editor**.
-3. Copiá el Project URL y la publishable key (o legacy `anon` key) desde **Project Settings > API**.
-4. Pegá esos dos valores en `config.js`. Nunca uses la secret key ni `service_role`.
+## 1. Get a Riot API key
 
-La página sincroniza la lobby cada cinco segundos. Sin configuración, usa `localStorage` como respaldo local.
+1. Sign in at the [Riot Developer Portal](https://developer.riotgames.com/) with your Riot account.
+2. Open **Dashboard** and copy the generated development API key.
+3. For a lasting private installation, select **Register Product** and request a personal key with an accurate description of SaleLoL, its private audience, the Windows companion and the APIs it uses.
+4. Use a production key instead if the site will be offered publicly.
 
-The lobby stores a full Monday-to-Sunday schedule and rolls into the next week every Sunday at 23:59 in `Europe/Amsterdam`. Existing installations should run `db_migrations/switch-to-monday-week.sql` once in the Supabase SQL Editor; it keeps the current Monday-Saturday availability, discards the previous Sunday, and leaves the upcoming Sunday empty.
+Development keys expire every 24 hours and must be regenerated. Never put `RIOT_API_KEY` in `config.js`, GitHub, the companion binary or any browser-delivered file. It belongs only in Supabase Edge Function secrets. Riot documents the key types and registration process in its [Developer Portal guide](https://developer.riotgames.com/docs/portal) and explicitly prohibits embedding keys in distributed code in the [League developer documentation](https://developer.riotgames.com/docs/lol).
 
-Riot profiles are cached through the `riot-profile` Edge Function. Run `db_migrations/add-riot-profiles.sql`, add `RIOT_API_KEY` as a Supabase secret, and deploy `supabase/functions/riot-profile/index.ts`.
+## 2. Create and configure Supabase
 
-## Secure the public lobby
+### Create the project
 
-Run `db_migrations/secure-public-api.sql`, then configure a shared invitation code and deploy the protected write endpoints:
+1. Open the [Supabase Dashboard](https://supabase.com/dashboard).
+2. Select **New project**, choose an organization, project name, database password and region, and wait for provisioning to finish.
+3. Open **Project Settings → API** and copy the Project URL and publishable key (or legacy `anon` key).
+4. Update `config.js`:
 
-```bash
-supabase secrets set LOBBY_INVITE_TOKEN="choose-a-long-random-code"
-supabase functions deploy lobby-join
-supabase functions deploy lobby-update
-supabase functions deploy riot-profile
+```js
+window.SALELOL_CONFIG = {
+  supabaseUrl: "https://YOUR_PROJECT_REF.supabase.co",
+  supabaseAnonKey: "YOUR_PUBLISHABLE_KEY"
+};
 ```
 
-The browser publishable key remains public and read-only. Each player receives a device-specific ownership token, and up to ten devices can be authorized by rejoining with the shared invitation code. Every Edge Function is self-contained so its `index.ts` can be pasted directly into the Dashboard editor.
-For Recent Games and the removal of the old lock-in state, run `db_migrations/add-shared-matches-remove-locking.sql`, then deploy both `riot-profile` and `clash-schedule`. The Riot profile refresh discovers matches containing at least two registered players and stores full team champion/KDA summaries.
+The publishable key is intentionally used by the browser and has read-only access through RLS. Never use the secret or `service_role` key in `config.js`.
 
-To upgrade Recent Games to a rolling month, run `db_migrations/retain-one-month-shared-matches.sql` and redeploy `riot-profile`. The migration adds indexed 30-day retention, a cleanup trigger, and a daily Supabase cron cleanup. The desktop UI shows a compact match navigator on the left and one selected match on the right; the latest match is selected by default. “Mancos de la semana” is calculated from every stored shared match in the current Monday-to-Sunday week.
+### Create the database
 
-Clash notifications use Riot's EUW `clash-v1` schedule and the existing `RIOT_API_KEY` secret.
+1. In Supabase, open **SQL Editor → New query**.
+2. Copy all of `db_migrations/000_initial.sql` into the editor.
+3. Select **Run** once.
 
-Live-game notifications use Riot Spectator-V5. Run `db_migrations/add-live-game-cache.sql` and deploy `supabase/functions/live-games/index.ts` as the `live-games` Edge Function. It reuses `RIOT_API_KEY` and `LOBBY_INVITE_TOKEN`, caches checks for 75 seconds, and exposes only the registered players currently in a game.
+This migration creates every table, index, function, trigger, RLS policy, grant and Realtime publication required by a fresh SaleLoL installation. Existing databases that ran the former incremental migrations do not need to run it.
 
-## Windows live-stats companion
+### Add Edge Function secrets
 
-The Tauri application under `desktop/` reads the local Riot Live Client Data API and publishes only the active player's own KDA and CS. SaleLoL continues to show every registered player detected by Spectator-V5; a `LIVE` badge and live KDA appear only when that player is running the companion.
+Open **Edge Functions → Secrets** and create:
 
-### Supabase deployment
+| Secret | Required | Purpose |
+|---|---:|---|
+| `RIOT_API_KEY` | Yes | Riot Web API authentication |
+| `LOBBY_INVITE_TOKEN` | Yes | Shared private invitation code entered by users |
+| `RIOT_REFRESH_SECRET` | Recommended | Protects manual bulk profile refreshes |
 
-1. Run `db_migrations/add-desktop-live-stats.sql` in **Supabase Dashboard > SQL Editor**.
-   If the live-stats table already exists, run `db_migrations/add-live-game-results.sql` instead.
-2. Create and deploy a new Edge Function named `live-stats-update` using `supabase/functions/live-stats-update/index.ts`.
-3. Redeploy `live-games` using the updated `supabase/functions/live-games/index.ts`.
-4. Reuse the existing `LOBBY_INVITE_TOKEN`; no additional secret is required.
+Choose long random values for the application secrets. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are provided automatically to hosted Edge Functions; do not add them to the frontend.
 
-The companion receives a device ownership token from `lobby-join`. It never contains the Riot API key or Supabase service-role key. Live rows cannot be read or written directly by anonymous clients, and records older than 35 seconds are ignored.
+CLI equivalent:
 
-### Build the Windows installer
+```bash
+supabase login
+supabase link --project-ref YOUR_PROJECT_REF
+supabase secrets set RIOT_API_KEY="RGAPI-..."
+supabase secrets set LOBBY_INVITE_TOKEN="YOUR_LONG_RANDOM_INVITE_CODE"
+supabase secrets set RIOT_REFRESH_SECRET="YOUR_LONG_RANDOM_REFRESH_SECRET"
+```
 
-Install the [Tauri Windows prerequisites](https://v2.tauri.app/start/prerequisites/), then:
+### Create the Edge Functions
+
+Deploy every directory under `supabase/functions` using the directory name as the function name:
+
+| Function | Responsibility |
+|---|---|
+| `lobby-join` | Validates the invitation and creates/authorizes a player |
+| `lobby-update` | Updates availability using the player's ownership token |
+| `riot-profile` | Loads Riot identity, rank and shared match history |
+| `refresh-riot-profiles` | Manually refreshes all cached Riot profiles |
+| `clash-schedule` | Loads the upcoming EUW Clash schedule |
+| `live-games` | Detects active games and serves live/report data |
+| `live-stats-update` | Receives the companion player's live stats |
+| `post-game-report` | Builds the final report from Match-V5 and Timeline |
+
+Dashboard method, repeated for each function:
+
+1. Open **Edge Functions → Deploy a new function → Via Editor**.
+2. Enter the exact function name from the table.
+3. Replace the editor contents with the matching `supabase/functions/NAME/index.ts` file.
+4. Disable legacy JWT verification. SaleLoL performs invitation, ownership and rate-limit checks while the browser sends the publishable key.
+5. Select **Deploy function**.
+
+CLI equivalent:
+
+```bash
+supabase functions deploy lobby-join --no-verify-jwt
+supabase functions deploy lobby-update --no-verify-jwt
+supabase functions deploy riot-profile --no-verify-jwt
+supabase functions deploy refresh-riot-profiles --no-verify-jwt
+supabase functions deploy clash-schedule --no-verify-jwt
+supabase functions deploy live-games --no-verify-jwt
+supabase functions deploy live-stats-update --no-verify-jwt
+supabase functions deploy post-game-report --no-verify-jwt
+```
+
+## 3. Publish with GitHub Pages
+
+1. Create a GitHub repository or fork this one.
+2. Commit the updated `config.js` and push the files to `main`.
+3. Open **Settings → Pages** in the repository.
+4. Under **Build and deployment**, choose **Deploy from a branch**.
+5. Select **main**, folder **/(root)**, and save.
+6. Wait for deployment and select **Visit site**.
+
+The default project URL is `https://YOUR_GITHUB_USERNAME.github.io/YOUR_REPOSITORY_NAME/`. GitHub documents this in [Configuring a publishing source](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site).
+
+## 4. First run
+
+1. Open the GitHub Pages URL.
+2. Enter a Riot ID in `GameName#Tag` format.
+3. Enter the value configured as `LOBBY_INVITE_TOKEN`.
+4. Join and confirm that the Riot profile, rank and recent matches load.
+5. Repeat with another registered player to enable shared-match reports and group awards.
+
+Post-game reports require at least two registered SaleLoL players in the same match. Only one needs to run the companion to trigger generation.
+
+## Windows companion
+
+The Tauri project under `desktop/` reads `https://127.0.0.1:2999/liveclientdata/allgamedata`, verifies the active Riot ID and publishes only that player's visible live stats. At GameEnd it asks Supabase to build the final report. Riot API keys and Supabase service credentials are never stored in the companion.
+
+Any push to `main` that changes `desktop/**` triggers **Build Windows companion**. You can also run it from **Actions → Build Windows companion → Run workflow** and download the `salelol-companion-windows` artifact.
+
+To build locally, install the [Tauri Windows prerequisites](https://v2.tauri.app/start/prerequisites/) and run:
 
 ```bash
 cd desktop
-npm install
+npm ci
 npm run build
 ```
 
-The NSIS installer is created under `desktop/src-tauri/target/release/bundle/nsis/`. The **Build Windows companion** GitHub Action can also be run manually and uploads the installer as an artifact.
+The NSIS installer is created under `desktop/src-tauri/target/release/bundle/nsis/`. Before distributing it, keep the SaleLoL product description in Riot's Developer Portal updated with the native client, local endpoint, collected fields and retention.
 
-### Report the companion to Riot
+## Local frontend development
 
-Before sharing the installer beyond development testing:
+No frontend build is required:
 
-1. Open the SaleLoL product in the [Riot Developer Portal](https://developer.riotgames.com/) or register it if it is not registered yet.
-2. In the product description/application notes, disclose the native Windows companion and the exact local endpoint: `GET /liveclientdata/allgamedata` on `https://127.0.0.1:2999`.
-3. Explain that the typed Riot ID must match `activePlayer.riotId`, only that player's visible KDA/CS is transmitted, participation is opt-in, and data expires after 35 seconds.
-4. State that the data is shown only to the private SaleLoL lobby, provides no recommendations or hidden enemy information, and is never sold or shared with another service.
-5. Include the SaleLoL URL, screenshots of this login/status flow, a Windows test build, privacy/retention details, and Riot's required product disclaimer.
-6. Ask Riot to acknowledge this updated use case before enabling broad distribution. Keep the product notes current whenever the collected fields or endpoints change.
+```bash
+python -m http.server 8000
+```
 
-Riot documents the Game Client APIs as local-only native APIs and asks developers to disclose which client endpoints they use. The companion deliberately validates the local active player instead of collecting the other nine participants.
+Open `http://localhost:8000`. Without valid Supabase values in `config.js`, the basic UI falls back to browser `localStorage`.
+
+## Operations
+
+Preview lobby users without a Riot profile:
+
+```sql
+select * from public.cleanup_invalid_players();
+```
+
+Delete them:
+
+```sql
+select * from public.cleanup_invalid_players(false);
+```
+
+Shared matches are retained for 30 days and cleaned after shared-match writes and Riot profile refreshes.
+
+## Security
+
+- The browser receives only a Supabase publishable key with column-level read grants and RLS.
+- All writes go through Edge Functions.
+- Player updates require an ownership token and support multiple authorized devices.
+- Invitation and request rate limits are enforced server-side.
+- `RIOT_API_KEY`, `service_role` and refresh secrets must never be committed or delivered to browsers.
+- SaleLoL does not provide in-game recommendations or hidden enemy information.
