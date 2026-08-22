@@ -5,7 +5,7 @@ const invoke=window.__TAURI__.core.invoke;
 const $=selector=>document.querySelector(selector);
 const form=$("#credentials-form"),connectButton=$("#connect-button"),disconnectButton=$("#disconnect-button");
 const statusCard=$(".status-card"),preview=$("#live-preview");
-let session=null,pollTimer=null,wasLive=false,lastGameResult=null,reportRequested=false;
+let session=null,pollTimer=null,wasLive=false,lastGameResult=null,reportRequested=false,reportCompleted=false;
 
 function cleanCredentials(){return {gameName:$("#game-name").value.trim().replace(/\s+/g," ").slice(0,16),tagLine:$("#tag-line").value.trim().replace(/[^a-zA-Z0-9]/g,"").slice(0,5),invitationCode:$("#invite-code").value.trim()};}
 function riotId(credentials){return `${credentials.gameName}#${credentials.tagLine}`;}
@@ -14,20 +14,26 @@ function setConnected(connected){connectButton.classList.toggle("hidden",connect
 async function callFunction(name,body){const response=await fetch(`${SUPABASE_URL}/functions/v1/${name}`,{method:"POST",headers:{apikey:SUPABASE_ANON_KEY,Authorization:`Bearer ${SUPABASE_ANON_KEY}`,"Content-Type":"application/json"},body:JSON.stringify(body)});const payload=await response.json().catch(()=>({}));if(!response.ok)throw new Error(payload.error||`Error ${response.status}`);return payload;}
 async function publish(active,stats=null){if(!session)return;await callFunction("live-stats-update",{name:riotId(session),invitationCode:session.invitationCode,ownerToken:session.ownerToken,active,stats});}
 async function requestReport(){
-  if(!session||reportRequested)return;
+  if(!session||reportRequested||reportCompleted)return;
+  const finishedSession={...session};
   reportRequested=true;
-  for(let attempt=0;attempt<8;attempt++){
-    try{await callFunction("post-game-report",{name:riotId(session),invitationCode:session.invitationCode,ownerToken:session.ownerToken});setStatus("connected","Reporte listo","Las estadísticas finales ya están en el lobby.");return;}
-    catch{await new Promise(resolve=>setTimeout(resolve,15_000));}
+  try{
+    for(let attempt=0;attempt<8;attempt++){
+      try{await callFunction("post-game-report",{name:riotId(finishedSession),invitationCode:finishedSession.invitationCode,ownerToken:finishedSession.ownerToken});reportCompleted=true;setStatus("connected","Reporte listo","Las estadísticas finales ya están en Live.");return;}
+      catch{if(attempt<7)await new Promise(resolve=>setTimeout(resolve,15_000));}
+    }
+    setStatus("error","No se pudo guardar el reporte","Riot no publicó la partida a tiempo. La próxima se volverá a intentar automáticamente.");
+  }finally{
+    reportRequested=false;
   }
-  reportRequested=false;
 }
 function showLive(stats){preview.classList.remove("hidden");$("#live-champion").textContent=stats.championName;$("#live-kda").textContent=`${stats.kills}/${stats.deaths}/${stats.assists}`;$("#live-extra").textContent=`${stats.creepScore} CS · ${Math.floor(stats.gameTimeSeconds/60)} min${stats.gameMode?` · ${stats.gameMode}`:""}`;}
 async function poll(){
   if(!session)return;
   try{
     const stats=await invoke("read_live_stats",{riotId:riotId(session)});
-    if(!stats){if(wasLive)await publish(false);wasLive=false;lastGameResult=null;reportRequested=false;preview.classList.add("hidden");setStatus("connected","Conectado","Esperando que comience una partida de League of Legends…");return;}
+    if(!stats){if(wasLive){wasLive=false;preview.classList.add("hidden");setStatus("connected","Preparando reporte","Esperando que Riot publique la partida…");try{await publish(false);}finally{requestReport();}}else if(!reportRequested&&!reportCompleted){setStatus("connected","Conectado","Esperando que comience una partida de League of Legends…");}lastGameResult=null;return;}
+    if(!wasLive)reportCompleted=false;
     await publish(true,stats);wasLive=true;lastGameResult=stats.gameResult||lastGameResult;showLive(stats);
     if(lastGameResult)requestReport();
     setStatus("live",lastGameResult?"Preparando reporte":"Transmitiendo tus stats",lastGameResult?"Riot puede tardar unos segundos en publicar la partida.":"SaleLoL está recibiendo exclusivamente tus datos en vivo.");
